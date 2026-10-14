@@ -327,15 +327,11 @@ def _tor_paths(args) -> tor.TorPaths:
 
 
 def _tor_ports(paths: tor.TorPaths) -> dict[str, int]:
-    ports = {}
     try:
-        for line in paths.torrc.read_text(encoding="utf-8").splitlines():
-            key = line.split(" ")[0]
-            if key in ("SocksPort", "HTTPTunnelPort", "ControlPort"):
-                ports[key] = int(line.rsplit(":", 1)[1])
+        torrc = paths.torrc.read_text(encoding="utf-8")
     except FileNotFoundError:
-        pass
-    return ports
+        return {}
+    return {name: port for name, (_, port) in tor.torrc_ports(torrc).items()}
 
 
 def cmd_tor_start(args) -> int:
@@ -368,14 +364,13 @@ def cmd_tor_start(args) -> int:
         else:
             print("! macOS-Proxy konnte nicht gesetzt werden (Admin-Passwort?).")
     else:
-        print(f"Proxy: SOCKS5 127.0.0.1:{socks_port}  |  HTTPS-Proxy 127.0.0.1:{http_port}")
+        print(f"Proxy: SOCKS5 127.0.0.1:{socks_port}  |  HTTP-Proxy 127.0.0.1:{http_port}")
     if args.share:
         lan = tor.lan_addresses() or ["<IP-dieses-Rechners>"]
         print(
             "\nHandy im selben WLAN (iPhone: Einstellungen › WLAN › ⓘ › Proxy konfigurieren › Manuell;\n"
             "Android: WLAN lange drücken › Netzwerk ändern › Proxy › Manuell):\n"
-            f"  Server {lan[0]}   Port {http_port}\n"
-            "  Hinweis: so laufen HTTPS-Seiten (fast alle) über Rumänien."
+            f"  Server {lan[0]}   Port {http_port}"
         )
     print("\nBeenden mit: neuvpn tor stop   |   neue IP: neuvpn tor new-ip")
     return 0
@@ -400,10 +395,10 @@ def cmd_tor_status(args) -> int:
         print("Tor läuft nicht. Starten mit: neuvpn tor start")
         return 1
     ports = _tor_ports(paths)
-    print(f"Tor läuft (PID {pid}), SOCKS 127.0.0.1:{ports.get('SocksPort')}, "
-          f"HTTPS-Proxy :{ports.get('HTTPTunnelPort')}")
+    print(f"Tor läuft (PID {pid}), SOCKS 127.0.0.1:{ports.get('socks')}, "
+          f"HTTP-Proxy :{ports.get('http')}")
     try:
-        ip, country, city = geo.lookup(socks=("127.0.0.1", ports["SocksPort"]), timeout=30)
+        ip, country, city = geo.lookup(socks=("127.0.0.1", ports["socks"]), timeout=30)
         print(f"Öffentliche IP {ip} – {_country(country) if country else 'unbekannt'}"
               + (f", {city}" if city else ""))
     except (OSError, KeyError) as exc:
@@ -415,7 +410,7 @@ def cmd_tor_new_ip(args) -> int:
     paths = _tor_paths(args)
     if not tor.running_pid(paths):
         raise NeuVPNError("Tor läuft nicht.")
-    port = _tor_ports(paths).get("ControlPort", tor.DEFAULT_CONTROL_PORT)
+    port = _tor_ports(paths).get("control", tor.DEFAULT_CONTROL_PORT)
     try:
         tor.new_identity(paths, port)
     except (tor.TorError, OSError) as exc:

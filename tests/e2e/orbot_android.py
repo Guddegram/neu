@@ -53,6 +53,11 @@ def screen() -> list[tuple[str, int, int]]:
     return nodes
 
 
+def screen_size() -> tuple[int, int]:
+    m = re.search(r"(\d+)x(\d+)", adb("shell", "wm", "size"))
+    return (int(m.group(1)), int(m.group(2))) if m else (1080, 2400)
+
+
 def find(nodes, pattern: str):
     rx = re.compile(pattern, re.IGNORECASE)
     return next((n for n in nodes if rx.fullmatch(n[0])), None)
@@ -75,10 +80,11 @@ def wait_for(pattern: str, timeout: int, tap_it: bool = True, dismiss=DISMISS, s
         extra = next((n for p in dismiss for n in nodes if re.fullmatch(p, n[0], re.I)), None)
         if extra:
             tap(extra)
-        elif scroll and len(nodes) > 2:
-            ys = sorted(n[2] for n in nodes[1:])
-            x = nodes[-1][1]
-            adb("shell", "input", "swipe", str(x), str(ys[-1]), str(x), str(ys[0]), "600")
+        elif scroll:
+            # swipe in the middle of the screen; a swipe from the bottom edge means "Home"
+            w, h = screen_size()
+            adb("shell", "input", "swipe", str(w // 2), str(h * 65 // 100), str(w // 2),
+                str(h * 40 // 100), "600")
         time.sleep(2)
     raise TimeoutError(f"'{pattern}' nicht gefunden")
 

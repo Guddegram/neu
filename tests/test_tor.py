@@ -42,7 +42,11 @@ class TorrcTest(unittest.TestCase):
         self.assertIn("ExitNodes {ro}", torrc)
         self.assertIn("StrictNodes 1", torrc)
         self.assertIn("SocksPort 127.0.0.1:9055", torrc)
-        self.assertIn("HTTPTunnelPort 127.0.0.1:9056", torrc)
+        self.assertIn("# neuvpn-http-proxy 127.0.0.1:9056", torrc)
+        self.assertNotIn("HTTPTunnelPort", torrc)
+        self.assertEqual(tor.torrc_ports(torrc), {"socks": ("127.0.0.1", 9055),
+                                                  "http": ("127.0.0.1", 9056),
+                                                  "control": ("127.0.0.1", 9057)})
         self.assertIn('DataDirectory "/tmp/x y/tor-data"', torrc)
         self.assertNotIn("SocksPolicy", torrc)
 
@@ -85,21 +89,33 @@ class TorProcessTest(unittest.TestCase):
 
     def test_start_reports_progress_and_stop(self):
         port = self._free_port()
-        torrc = tor.build_torrc(self.paths, "RO", port, port, port)
+        http_port = self._free_port()
+        torrc = tor.build_torrc(self.paths, "RO", port, http_port, port)
         seen = []
         with self._fake_tor():
             pid = tor.start(self.paths, torrc, timeout=10, progress=seen.append)
         self.assertEqual(seen[-1], 100)
         self.assertEqual(tor.running_pid(self.paths), pid)
+        # the HTTP proxy for phones runs next to tor and accepts connections
+        socket.create_connection(("127.0.0.1", http_port), timeout=5).close()
+        http_pid = int(self.paths.http_pid.read_text())
         with self.assertRaises(tor.TorError):
             tor.start(self.paths, torrc)  # already running
         self.assertTrue(tor.stop(self.paths))
         self.assertIsNone(tor.running_pid(self.paths))
+        self.assertFalse(self.paths.http_pid.exists())
+        with self.assertRaises(ConnectionRefusedError):
+            socket.create_connection(("127.0.0.1", http_port), timeout=5)
+        try:
+            os.kill(http_pid, 0)
+            os.waitpid(http_pid, os.WNOHANG)  # reap if it is our zombie child
+        except (ProcessLookupError, ChildProcessError):
+            pass
         self.assertFalse(tor.stop(self.paths))
 
     def test_crash_and_timeout_are_reported(self):
         port = self._free_port()
-        torrc = tor.build_torrc(self.paths, "RO", port, port, port)
+        torrc = tor.build_torrc(self.paths, "RO", port, self._free_port(), port)
         with self._fake_tor("crash"), self.assertRaises(tor.TorError) as ctx:
             tor.start(self.paths, torrc, timeout=10)
         self.assertIn("Could not bind", str(ctx.exception))
@@ -205,7 +221,11 @@ def _fake_socks_server(connections):
         except OSError:
             pass
         finally:
-            b.close()
+            for s in (a, b):  # shutdown, not just close: the other thread still blocks in recv
+                try:
+                    s.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
 
     def serve():
         while True:
