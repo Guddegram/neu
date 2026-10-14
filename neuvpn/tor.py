@@ -73,7 +73,8 @@ def build_torrc(
         f"ControlPort 127.0.0.1:{control_port}",
         "CookieAuthentication 1",
         f"DataDirectory {_quote(paths.data)}",
-        f"Log notice file {_quote(paths.log)}",
+        # logs go to stdout, which start() writes to tor.log (also catches early errors)
+        "Log notice stdout",
         f"ExitNodes {{{code}}}",
         "StrictNodes 1",
         "GeoIPExcludeUnknown 1",
@@ -139,14 +140,14 @@ def start(paths: TorPaths, torrc: str, timeout: float = BOOTSTRAP_TIMEOUT, progr
     paths.base.mkdir(parents=True, exist_ok=True, mode=0o700)
     paths.data.mkdir(parents=True, exist_ok=True, mode=0o700)
     paths.torrc.write_text(torrc, encoding="utf-8")
-    paths.log.write_text("", encoding="utf-8")
-    proc = subprocess.Popen(
-        [tor, "-f", str(paths.torrc)],
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    with paths.log.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [tor, "-f", str(paths.torrc)],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
     paths.pid.write_text(str(proc.pid), encoding="utf-8")
     deadline = time.monotonic() + timeout
     last = -1

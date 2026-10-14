@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import socket
 import stat
 import struct
@@ -15,18 +16,17 @@ from unittest import mock
 from neuvpn import geo, tor
 from tests.test_cli import run
 
-# Stand-in for the tor binary: reads the Log path from the torrc given with -f,
-# reports bootstrap progress there and runs until terminated.
+# Stand-in for the tor binary: reports bootstrap progress on stdout (like real
+# tor with "Log notice stdout") and runs until terminated.
 FAKE_TOR = r'''#!{python}
-import shlex, signal, sys, time
-torrc = open(sys.argv[sys.argv.index("-f") + 1]).read()
-log = next(shlex.split(l)[3] for l in torrc.splitlines() if l.startswith("Log notice file"))
+import signal, sys, time
+assert "Log notice stdout" in open(sys.argv[sys.argv.index("-f") + 1]).read()
 if "{mode}" == "crash":
-    open(log, "a").write("[err] Could not bind to 127.0.0.1:9055\n")
+    print("[err] Could not bind to 127.0.0.1:9055", flush=True)
     sys.exit(1)
 signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
 for p in (0, 50, 100):
-    open(log, "a").write(f"[notice] Bootstrapped {{p}}% (x): x\n")
+    print(f"[notice] Bootstrapped {{p}}% (x): x", flush=True)
     if "{mode}" == "hang" and p == 50:
         break
     time.sleep(0.1)
@@ -116,6 +116,29 @@ class TorProcessTest(unittest.TestCase):
             with self._fake_tor(), self.assertRaises(tor.TorError) as ctx:
                 tor.start(self.paths, torrc)
         self.assertIn(str(port), str(ctx.exception))
+
+
+@unittest.skipUnless(shutil.which("tor"), "tor not installed")
+class RealTorTest(unittest.TestCase):
+    """Starts the real tor binary with our torrc (path with spaces, like macOS home folders)."""
+
+    def test_real_tor_accepts_config_and_logs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = tor.TorPaths(Path(tmp) / "Mein Ordner" / "tor")
+            with socket.socket() as s:
+                s.bind(("127.0.0.1", 0))
+                port = s.getsockname()[1]
+            torrc = tor.build_torrc(paths, "RO", port, port + 1, port + 2)
+            try:
+                tor.start(paths, torrc, timeout=4)
+                tor.stop(paths)  # bootstrapped already (fast network) – fine too
+            except tor.TorError as exc:
+                # no internet for tor here: it must still be running and logging, not crash
+                self.assertIn("nicht rechtzeitig", str(exc))
+            log = paths.log.read_text()
+            self.assertIn("Opened Socks listener", log)
+            self.assertIn("Bootstrapped", log)
+            self.assertIsNone(tor.running_pid(paths))
 
 
 class MacProxyTest(unittest.TestCase):
