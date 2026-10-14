@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuvpn"
+dynamic = ["version"]
+description = "Eigenes, kostenloses WireGuard-VPN mit Standort Rumänien"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+qr = ["qrcode>=7"]
+
+[project.scripts]
+neuvpn = "neuvpn.cli:main"
+
+[tool.setuptools]
+packages = ["neuvpn"]
+
+[tool.setuptools.dynamic]
+version = { attr = "neuvpn.__version__" }

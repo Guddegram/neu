@@ -1,0 +1,24 @@
+# neuvpn als Docker-Container (Server in Rumänien).
+#   NEUVPN_ENDPOINT=meinvpn.duckdns.org docker compose up -d --build
+#   docker compose logs neuvpn          # QR-Codes der ersten Geräte
+services:
+  neuvpn:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: neuvpn
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    environment:
+      NEUVPN_ENDPOINT: ${NEUVPN_ENDPOINT:?NEUVPN_ENDPOINT setzen}
+      NEUVPN_PORT: ${NEUVPN_PORT:-51820}
+      NEUVPN_COUNTRY: RO
+      NEUVPN_CLIENTS: ${NEUVPN_CLIENTS:-handy,laptop}
+    ports:
+      - "${NEUVPN_PORT:-51820}:${NEUVPN_PORT:-51820}/udp"
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - ./data:/etc/neuvpn

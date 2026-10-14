@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+# private keys / client configs – never commit
+data/
+state.json
+*.conf
+*.ovpn
+vpngate-profile/
