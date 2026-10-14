@@ -61,9 +61,11 @@ Die Dateien (Ordner `vpngate-profile/`) per Doppelklick in **Tunnelblick** (kost
 
 ### Variante 1: Android – Orbot (Tor, Ausgang Rumänien)
 1. **Orbot** installieren (Play Store oder F-Droid, Open Source vom Guardian Project).
-2. In Orbot: **… / Mehr › Einstellungen › Exit Nodes** → `{ro}` eintragen und **Strict Nodes** aktivieren
-   (Menünamen können je nach Orbot-Version leicht abweichen).
-3. In Orbot den **VPN-Modus** einschalten und verbinden → alle Apps laufen über Rumänien.
+2. Orbot öffnen, **Verbinden** (englisch „Connect“) tippen und die VPN-Anfrage mit **OK** bestätigen.
+3. Wenn „Verbunden“ dasteht: **Ausgang ändern** (🌎, englisch „Change exit“) tippen, nach unten
+   scrollen und **🇷🇴 Rumänien** wählen. Orbot stellt dann selbst „nur Rumänien“ ein.
+4. Fertig – alle Apps des Handys laufen über Rumänien. Prüfen: im Browser
+   [ifconfig.co/json](https://ifconfig.co/json) öffnen → `"country_iso": "RO"`.
 
 ### Variante 2: iPhone oder Android – über deinen Mac im gleichen WLAN
 Auf dem Mac:
@@ -75,9 +77,9 @@ Das zeigt die IP deines Macs an. Dann auf dem Handy:
   Server = IP des Macs, Port = **9056**
 - **Android:** WLAN lange drücken › Netzwerk ändern › Erweitert › Proxy › **Manuell** → gleiche Werte
 
-So laufen alle HTTPS-Seiten und Apps (also fast alles) des Handys über Rumänien. Funktioniert nur
-im gleichen WLAN wie der Mac und nur, solange der Mac an ist. Danach den Proxy am Handy wieder auf
-„Aus“ stellen.
+So laufen Webseiten (`https://` und `http://`) und alle Apps, die die Proxy-Einstellung des Handys
+nutzen, über Rumänien. Funktioniert nur im gleichen WLAN wie der Mac und nur, solange der Mac an ist.
+Danach den Proxy am Handy wieder auf „Aus“ stellen.
 
 ### Variante 3: iPhone oder Android – VPN Gate mit OpenVPN Connect
 1. **OpenVPN Connect** installieren (App Store / Play Store, kostenlos).
@@ -92,7 +94,7 @@ im gleichen WLAN wie der Mac und nur, solange der Mac an ist. Danach den Proxy a
 
 ## Prüfen, ob es klappt
 - Mac: `neuvpn tor status` oder `neuvpn check`
-- Überall: [ipinfo.io](https://ipinfo.io) öffnen → `"country": "RO"`
+- Überall: [ifconfig.co/json](https://ifconfig.co/json) öffnen → `"country_iso": "RO"` (ipinfo.io sperrt manche Tor-Ausgänge)
 
 ---
 
@@ -106,8 +108,9 @@ im gleichen WLAN wie der Mac und nur, solange der Mac an ist. Danach den Proxy a
 | `neuvpn check [--socks 127.0.0.1:9055] [--expect RO]` | Aus welchem Land kommt der Verkehr? |
 | `neuvpn init` / `add` / `show` / `list` / `remove` / `enable` / `disable` / `apply` / `status` | Eigener WireGuard-Server (siehe unten) |
 
-Ports von `neuvpn tor`: SOCKS5 `9055`, HTTPS-Proxy `9056`, Steuerung `9057` (nur lokal).
-Mit `--share` sind SOCKS/HTTPS-Proxy nur für Geräte aus dem lokalen Netz (`192.168.x.x` usw.) erlaubt.
+Ports von `neuvpn tor`: SOCKS5 `9055`, HTTP-Proxy `9056` (für `http://` und `https://`),
+Steuerung `9057` (nur lokal). Mit `--share` sind SOCKS- und HTTP-Proxy nur für Geräte aus dem lokalen
+Netz (`192.168.x.x` usw.) erlaubt.
 
 ---
 
