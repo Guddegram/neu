@@ -51,18 +51,32 @@ jobs:
       - if: always()
         run: python3 -m neuvpn tor stop
 
+  # Real Mac: setup script, desktop shortcuts, Safari + Chrome, phone via --share
   tor-romania-macos:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Mac-Einrichtung wie beim Nutzer
-        run: ./scripts/mac-setup.sh
-      - name: Schreibtisch-Dateien vorhanden
-        run: test -x "$HOME/Desktop/Rumänien-VPN an.command" && test -x "$HOME/Desktop/Rumänien-VPN aus.command"
-      - name: Einschalten (inkl. macOS-System-Proxy)
-        run: neuvpn tor start --timeout 300
-      - run: networksetup -getsocksfirewallproxy Ethernet || networksetup -getsocksfirewallproxy Wi-Fi || true
-      - run: neuvpn check --socks 127.0.0.1:9055 --expect RO
-      - name: Ausschalten
-        if: always()
-        run: neuvpn tor stop
+      - run: tests/e2e/mac_test.sh
+
+  # Real Android (emulator): Orbot, "Change exit" -> Romania, check IP
+  orbot-android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: KVM aktivieren
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Neueste Orbot-Version laden
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tests/e2e/fetch_orbot.py orbot.apk
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          script: python3 tests/e2e/orbot_android.py orbot.apk
