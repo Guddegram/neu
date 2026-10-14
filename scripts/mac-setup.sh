@@ -66,9 +66,13 @@ info "Doppelklick-Dateien auf dem Schreibtisch anlegen"
 DESK="$HOME/Desktop"
 cat > "$DESK/Rumänien-VPN an.command" <<EOF
 #!/bin/sh
-"$BIN" tor start
-echo
-echo "Dieses Fenster kann geschlossen werden – das VPN läuft weiter."
+if "$BIN" tor start; then
+  echo
+  echo "Dieses Fenster kann geschlossen werden – das VPN läuft weiter."
+else
+  echo
+  echo "Das hat nicht geklappt (siehe oben). Bitte Internet prüfen und nochmal doppelklicken."
+fi
 EOF
 cat > "$DESK/Rumänien-VPN aus.command" <<EOF
 #!/bin/sh

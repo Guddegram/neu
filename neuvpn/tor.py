@@ -21,7 +21,8 @@ from pathlib import Path
 DEFAULT_SOCKS_PORT = 9055
 DEFAULT_HTTP_PORT = 9056  # HTTP proxy (neuvpn.httpproxy) for apps/phones without SOCKS support
 DEFAULT_CONTROL_PORT = 9057
-BOOTSTRAP_TIMEOUT = 180
+BOOTSTRAP_TIMEOUT = 300
+STALL_TIMEOUT = 90  # restart tor if the bootstrap is stuck this long
 
 _HTTP_MARKER = "# neuvpn-http-proxy"
 _PRIVATE_NETS = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
@@ -155,7 +156,42 @@ def torrc_ports(torrc: str) -> dict[str, tuple[str, int]]:
     return ports
 
 
-def start(paths: TorPaths, torrc: str, timeout: float = BOOTSTRAP_TIMEOUT, progress=None) -> int:
+def _spawn_tor(tor: str, paths: TorPaths) -> subprocess.Popen:
+    with paths.log.open("w", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [tor, "-f", str(paths.torrc)],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    paths.pid.write_text(str(proc.pid), encoding="utf-8")
+    return proc
+
+
+def _terminate(proc: subprocess.Popen) -> None:
+    proc.terminate()
+    try:
+        proc.wait(10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
+def start(
+    paths: TorPaths,
+    torrc: str,
+    timeout: float = BOOTSTRAP_TIMEOUT,
+    progress=None,
+    stall_timeout: float = STALL_TIMEOUT,
+    on_restart=None,
+) -> int:
+    """Start tor and wait until it is connected.
+
+    If the bootstrap makes no progress for `stall_timeout` seconds (it sometimes
+    hangs at 50% while loading relay descriptors), tor is restarted with a fresh
+    cache, until `timeout` is reached.
+    """
     if running_pid(paths):
         raise TorError("Tor läuft bereits. Erst 'neuvpn tor stop' ausführen.")
     ports = torrc_ports(torrc)
@@ -166,25 +202,19 @@ def start(paths: TorPaths, torrc: str, timeout: float = BOOTSTRAP_TIMEOUT, progr
     paths.base.mkdir(parents=True, exist_ok=True, mode=0o700)
     paths.data.mkdir(parents=True, exist_ok=True, mode=0o700)
     paths.torrc.write_text(torrc, encoding="utf-8")
-    with paths.log.open("w", encoding="utf-8") as log:
-        proc = subprocess.Popen(
-            [tor, "-f", str(paths.torrc)],
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
-    paths.pid.write_text(str(proc.pid), encoding="utf-8")
+    proc = _spawn_tor(tor, paths)
     deadline = time.monotonic() + timeout
     last = -1
+    last_change = time.monotonic()
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             paths.pid.unlink(missing_ok=True)
             raise TorError("Tor hat sich beendet:\n" + _log_tail(paths))
         percent = bootstrap_percent(paths.log.read_text(encoding="utf-8", errors="replace"))
-        if percent != last and progress:
-            progress(percent)
-            last = percent
+        if percent != last:
+            last, last_change = percent, time.monotonic()
+            if progress:
+                progress(percent)
         if percent == 100:
             if "http" in ports:
                 try:
@@ -193,13 +223,16 @@ def start(paths: TorPaths, torrc: str, timeout: float = BOOTSTRAP_TIMEOUT, progr
                     stop(paths)
                     raise
             return proc.pid
+        if time.monotonic() - last_change > stall_timeout:
+            if on_restart:
+                on_restart(percent)
+            _terminate(proc)
+            shutil.rmtree(paths.data, ignore_errors=True)  # fresh cache and guards
+            paths.data.mkdir(parents=True, exist_ok=True, mode=0o700)
+            proc = _spawn_tor(tor, paths)
+            last, last_change = -1, time.monotonic()
         time.sleep(0.5)
-    proc.terminate()
-    try:
-        proc.wait(10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait()
+    _terminate(proc)
     paths.pid.unlink(missing_ok=True)
     raise TorError(
         "Tor konnte sich nicht rechtzeitig verbinden (blockiert das Netz Tor?).\n" + _log_tail(paths)

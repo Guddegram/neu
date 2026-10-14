@@ -25,6 +25,13 @@ if "{mode}" == "crash":
     print("[err] Could not bind to 127.0.0.1:9055", flush=True)
     sys.exit(1)
 signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+import os
+marker = os.path.join(os.path.dirname(sys.argv[sys.argv.index("-f") + 1]), "stalled-once")
+if "{mode}" == "stall-once" and not os.path.exists(marker):
+    open(marker, "w").close()
+    print("[notice] Bootstrapped 50% (loading_descriptors): x", flush=True)
+    while True:
+        time.sleep(1)
 for p in (0, 50, 100):
     print(f"[notice] Bootstrapped {{p}}% (x): x", flush=True)
     if "{mode}" == "hang" and p == 50:
@@ -122,6 +129,17 @@ class TorProcessTest(unittest.TestCase):
         with self._fake_tor("hang"), self.assertRaises(tor.TorError):
             tor.start(self.paths, torrc, timeout=1)
         self.assertIsNone(tor.running_pid(self.paths))
+
+    def test_stalled_bootstrap_is_restarted(self):
+        port = self._free_port()
+        torrc = tor.build_torrc(self.paths, "RO", port, self._free_port(), port)
+        seen, restarts = [], []
+        with self._fake_tor("stall-once"):
+            tor.start(self.paths, torrc, timeout=20, progress=seen.append, stall_timeout=1,
+                      on_restart=restarts.append)
+        self.assertEqual(restarts, [50])
+        self.assertEqual(seen[-1], 100)
+        tor.stop(self.paths)
 
     def test_busy_port_is_detected(self):
         with socket.socket() as busy:

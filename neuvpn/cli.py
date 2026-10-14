@@ -345,7 +345,8 @@ def cmd_tor_start(args) -> int:
         print(f"  Verbindungsaufbau {percent:3d}%", flush=True)
 
     try:
-        tor.start(paths, torrc, timeout=args.timeout, progress=progress)
+        tor.start(paths, torrc, timeout=args.timeout, progress=progress,
+                  on_restart=lambda p: print(f"  Hängt bei {p}% – neuer Versuch …", flush=True))
     except tor.TorError as exc:
         raise NeuVPNError(str(exc)) from None
     try:

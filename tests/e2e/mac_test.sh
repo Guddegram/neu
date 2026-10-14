@@ -29,7 +29,7 @@ python3 -m venv /tmp/selenium-venv
 sudo safaridriver --enable
 
 echo "== Doppelklick auf 'Rumänien-VPN an' (mit Freigabe fürs Handy)"
-sed -i '' 's/tor start$/tor start --share --timeout 300/' "$HOME/Desktop/Rumänien-VPN an.command"
+sed -i '' 's/tor start;/tor start --share;/' "$HOME/Desktop/Rumänien-VPN an.command"
 "$HOME/Desktop/Rumänien-VPN an.command"
 networksetup -getsocksfirewallproxy "$(proxy_service)" | grep -q "Enabled: Yes" || fail "macOS-Proxy nicht aktiv"
 pass "macOS-Proxy aktiv"
