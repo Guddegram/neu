@@ -1,115 +1,98 @@
-# neuvpn – unser eigenes, kostenloses VPN (Standort: Rumänien 🇷🇴)
+# neuvpn – kostenloses VPN mit rumänischer IP 🇷🇴
 
-`neuvpn` ist ein selbst gehostetes VPN auf Basis von **[WireGuard](https://www.wireguard.com/)**
-(Open Source, modern, schnell, im Linux-Kernel eingebaut). Keine Abos, keine fremden Anbieter,
-keine Logs: der VPN-Server gehört dir.
+`neuvpn` gibt dir **kostenlos** eine **rumänische IP-Adresse** – lokal auf deinem Mac und Handy,
+**ohne** eigenen Server und ohne jemanden in Rumänien. Alles basiert auf Open Source:
 
-- 🔐 WireGuard mit zusätzlichem Preshared Key pro Gerät
-- 📱 Geräte per **QR-Code** in die offizielle WireGuard-App holen (Android, iOS, Windows, macOS, Linux)
-- 🇷🇴 Standard-Standort **Rumänien** – mit eingebautem Check, dass der Verkehr wirklich aus RO kommt
-- ⚡ Geräte hinzufügen/sperren **ohne** Verbindungsabbruch
-- 🛡️ Ganzer Verkehr durchs VPN, IPv6-Leckschutz, DNS über Quad9, Geräte untereinander isoliert
-- 🆓 Zusätzlich: **sofort kostenlos** über öffentliche rumänische VPN-Gate-Server (ohne eigenen Server)
-- 🐍 Keine Abhängigkeiten außer Python 3.10+ (Schlüssel werden selbst erzeugt, Curve25519 nach RFC 7748)
+| Modus | Was passiert | Rumänien sicher? | Geschwindigkeit |
+| --- | --- | --- | --- |
+| **`neuvpn tor`** (Hauptmodus) | [Tor](https://www.torproject.org) läuft lokal, Ausgang **nur über rumänische Tor-Server** (`ExitNodes {ro}`) | ✅ ja | mittel – reicht für Surfen, Social Media, Shops |
+| **`neuvpn free`** | Öffentliche, kostenlose [VPN-Gate](https://www.vpngate.net)-Server in Rumänien (OpenVPN) | ⚠️ nur wenn gerade einer online ist | meist schneller |
 
----
+Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalten (siehe ganz unten).
 
-## Wie kommt man kostenlos an eine rumänische IP?
-
-Wichtig zu wissen: **Die IP-Adresse (und damit das Land), mit der du im Internet auftauchst, ist
-immer die des VPN-Servers.** Für „Rumänien“ muss der Server also in Rumänien stehen.
-Die bekannten Gratis-Clouds (Oracle Always Free, Google Cloud Free Tier, AWS Free Tier) haben
-derzeit keine Region in Rumänien. Kostenlos gibt es deshalb zwei Wege:
-
-| Weg | Kosten | Eigenes VPN | Datenschutz | Aufwand |
-| --- | --- | --- | --- | --- |
-| **A) Eigener Server in Rumänien** – Raspberry Pi, alter Laptop/PC oder Mini-PC bei Familie/Freunden in RO | 0 € (vorhandene Hardware, Strom ≈ 0,50 €/Monat beim Pi) | ✅ | ✅ sehr gut – nur du | 15 Min. einmalig |
-| **B) `neuvpn free`** – öffentliche VPN-Gate-Server in Rumänien (Uni Tsukuba, Freiwillige) | 0 € | ❌ | ⚠️ fremde Betreiber, Verbindungen werden protokolliert | 1 Min. |
-| C) Günstiger VPS bei einem rumänischen Hoster | ca. 2–5 €/Monat | ✅ | ✅ gut | 10 Min. |
-
-**Empfehlung:** Weg A ist „unser eigenes VPN“. Weg B ist ideal, um sofort loszulegen oder als Notlösung.
-Für Weg C funktioniert exakt dieselbe Anleitung wie für A (nur ohne Portweiterleitung).
+> **Ehrlich gesagt:** Ein kostenloser Dienst hat Grenzen. Tor überträgt nur TCP (kein Online-Gaming,
+> keine Anrufe über UDP), ist langsamer als ein Bezahl-VPN, und manche Seiten zeigen bei Tor
+> Captchas oder sperren es. VPN-Gate-Server werden von unbekannten Freiwilligen betrieben und
+> protokollieren Verbindungen. Für Online-Banking deshalb lieber das VPN ausschalten.
 
 ---
 
-## Weg A: Eigener VPN-Server in Rumänien
+## 💻 Mac
 
-### Was du brauchst
-- Ein Linux-Gerät in Rumänien, das dauerhaft läuft: Raspberry Pi (ab Pi 3), alter PC/Laptop, Mini-PC
-  mit **Debian, Ubuntu oder Raspberry Pi OS**
-- Zugriff auf den Internet-Router dort (für eine Portweiterleitung)
-- Optional: kostenloses DynDNS bei [DuckDNS](https://www.duckdns.org) (Heim-IPs wechseln oft)
+### Einmalig einrichten (5 Minuten)
+1. **Terminal** öffnen (Programme › Dienstprogramme › Terminal).
+2. Falls noch nicht vorhanden, [Homebrew](https://brew.sh) installieren (kostenloser Paketmanager):
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   ```
+3. neuvpn holen und einrichten:
+   ```bash
+   git clone https://github.com/guddegram/neu.git && cd neu
+   ./scripts/mac-setup.sh
+   ```
 
-### 1. Kostenlosen DuckDNS-Namen holen (empfohlen)
-Auf [duckdns.org](https://www.duckdns.org) anmelden, eine Subdomain anlegen (z. B. `meinvpn-ro`) und
-den **Token** notieren.
+Danach liegen auf dem Schreibtisch zwei Dateien:
 
-### 2. Server installieren (auf dem Gerät in Rumänien)
+- **„Rumänien-VPN an“** – Doppelklick → nach ca. 10–60 Sekunden surft dein Mac mit rumänischer IP
+- **„Rumänien-VPN aus“** – Doppelklick → wieder normale IP
+
+Beim ersten Mal fragt macOS evtl. nach deinem Passwort (für die Proxy-Einstellungen).
+
+### Im Terminal
 ```bash
-sudo apt install -y git
-git clone https://github.com/guddegram/neu.git
-cd neu
-sudo ./scripts/install-server.sh --duckdns meinvpn-ro DEIN-DUCKDNS-TOKEN
+neuvpn tor start      # Tor (Ausgang Rumänien) starten + Mac-Proxy umstellen
+neuvpn tor status     # zeigt deine aktuelle IP und das Land
+neuvpn tor new-ip     # neue rumänische IP
+neuvpn tor stop       # aus, Proxy zurückstellen
 ```
-Ohne DuckDNS einfach `sudo ./scripts/install-server.sh` (dann wird die aktuelle öffentliche IP verwendet).
+`tor start` prüft am Ende selbst, ob die IP wirklich aus Rumänien kommt.
+Safari, Chrome, Firefox (Einstellung „System-Proxy verwenden“) und die meisten Apps nutzen den Proxy.
 
-Das Skript
-1. installiert WireGuard, iptables und qrencode,
-2. aktiviert IP-Weiterleitung und NAT,
-3. **prüft, ob der Server wirklich in Rumänien steht**,
-4. erzeugt alle Schlüssel und das erste Gerät `handy`,
-5. startet den VPN-Server (startet auch nach Neustart automatisch),
-6. zeigt den **QR-Code** und die nötige Portweiterleitung an.
-
-### 3. Portweiterleitung am Router in Rumänien
-Im Router (z. B. Digi/RCS-RDS-, Orange- oder Vodafone-Box, FritzBox, TP-Link …):
-**UDP-Port 51820 → lokale IP des Servers, Port 51820**. Das Skript zeigt die lokale IP an.
-
-> Kein Erfolg? Manche Anschlüsse haben keine eigene öffentliche IPv4 („CGNAT“). Dann beim Anbieter
-> eine öffentliche IPv4 anfragen, oder Weg C bzw. B nutzen.
-
-### 4. Geräte verbinden
-1. Offizielle **WireGuard**-App installieren (Play Store / App Store / [wireguard.com/install](https://www.wireguard.com/install/))
-2. „+“ → **QR-Code scannen** (Handy) bzw. „Tunnel aus Datei importieren“ (PC: `/etc/neuvpn/clients/<name>.conf`)
-3. Tunnel einschalten → fertig. Prüfen z. B. auf [ipinfo.io](https://ipinfo.io): `"country": "RO"`
-
-Weitere Geräte:
+### Mac: VPN Gate (Alternative)
 ```bash
-sudo neuvpn add laptop --qr     # neues Gerät + QR-Code
-sudo neuvpn apply               # Server übernimmt es sofort, ohne Unterbrechung
+neuvpn free                  # sucht rumänische Server, speichert die besten als .ovpn-Dateien
 ```
+Die Dateien (Ordner `vpngate-profile/`) per Doppelklick in **Tunnelblick** (kostenlos, Open Source;
+`./scripts/mac-setup.sh --tunnelblick`) oder **OpenVPN Connect** öffnen und verbinden.
 
 ---
 
-## Weg B: Sofort kostenlos über VPN Gate (ohne eigenen Server)
+## 📱 Handy
 
-Läuft auf deinem eigenen Rechner (Linux/macOS/Windows mit Python 3):
+### Variante 1: Android – Orbot (Tor, Ausgang Rumänien)
+1. **Orbot** installieren (Play Store oder F-Droid, Open Source vom Guardian Project).
+2. In Orbot: **… / Mehr › Einstellungen › Exit Nodes** → `{ro}` eintragen und **Strict Nodes** aktivieren
+   (Menünamen können je nach Orbot-Version leicht abweichen).
+3. In Orbot den **VPN-Modus** einschalten und verbinden → alle Apps laufen über Rumänien.
+
+### Variante 2: iPhone oder Android – über deinen Mac im gleichen WLAN
+Auf dem Mac:
 ```bash
-git clone https://github.com/guddegram/neu.git && cd neu
-python3 -m neuvpn free             # listet rumänische Server, speichert die 3 besten als .ovpn
-sudo python3 -m neuvpn free --connect   # Linux: direkt mit dem besten verbinden (benötigt openvpn)
+neuvpn tor start --share
 ```
-Die `.ovpn`-Dateien (Ordner `vpngate-profile/`) kannst du auch in **OpenVPN Connect** (Windows, macOS,
-Android, iOS) importieren. Sie sind bereits für aktuelle OpenVPN-Versionen angepasst.
+Das zeigt die IP deines Macs an. Dann auf dem Handy:
+- **iPhone:** Einstellungen › WLAN › ⓘ neben deinem WLAN › Proxy konfigurieren › **Manuell** →
+  Server = IP des Macs, Port = **9056**
+- **Android:** WLAN lange drücken › Netzwerk ändern › Erweitert › Proxy › **Manuell** → gleiche Werte
 
-⚠️ VPN-Gate-Server werden von unbekannten Freiwilligen betrieben und protokollieren Verbindungen.
-Für Online-Banking & private Daten deinen eigenen Server (Weg A) nutzen. Ob gerade ein rumänischer
-Server online ist, ändert sich laufend.
+So laufen alle HTTPS-Seiten und Apps (also fast alles) des Handys über Rumänien. Funktioniert nur
+im gleichen WLAN wie der Mac und nur, solange der Mac an ist. Danach den Proxy am Handy wieder auf
+„Aus“ stellen.
+
+### Variante 3: iPhone oder Android – VPN Gate mit OpenVPN Connect
+1. **OpenVPN Connect** installieren (App Store / Play Store, kostenlos).
+2. Auf dem Mac:
+   ```bash
+   neuvpn free --serve
+   ```
+3. Mit dem Handy den angezeigten **QR-Code scannen**, ein Profil antippen → „In OpenVPN Connect
+   öffnen“ → verbinden. (Alternativ die `.ovpn`-Datei per AirDrop schicken.)
 
 ---
 
-## Alternative: Docker
-
-Auf einem Server mit Docker (z. B. Weg C):
-```bash
-git clone https://github.com/guddegram/neu.git && cd neu
-NEUVPN_ENDPOINT=meinvpn-ro.duckdns.org docker compose up -d --build
-docker compose logs neuvpn                                   # QR-Codes für "handy" und "laptop"
-docker compose exec neuvpn neuvpn add tablet --qr            # weiteres Gerät
-docker compose exec neuvpn neuvpn apply
-```
-Schlüssel liegen in `./data`. Das Image bringt `wireguard-go` mit und funktioniert daher auch auf
-VPS ohne WireGuard-Kernelmodul.
+## Prüfen, ob es klappt
+- Mac: `neuvpn tor status` oder `neuvpn check`
+- Überall: [ipinfo.io](https://ipinfo.io) öffnen → `"country": "RO"`
 
 ---
 
@@ -117,44 +100,50 @@ VPS ohne WireGuard-Kernelmodul.
 
 | Befehl | Zweck |
 | --- | --- |
-| `neuvpn init --endpoint HOST` | Server einrichten (Schlüssel, Subnetz `10.8.0.0/24`, Standort `RO`) |
-| `neuvpn add NAME [--qr]` | Gerät hinzufügen |
-| `neuvpn show NAME [--qr] [--png datei.png] [--out datei.conf]` | Geräte-Konfiguration anzeigen/exportieren |
-| `neuvpn list` | Alle Geräte |
-| `neuvpn disable NAME` / `enable NAME` | Gerät sperren / wieder freigeben |
-| `neuvpn remove NAME` | Gerät löschen |
-| `neuvpn apply [--start]` | `/etc/wireguard/wg0.conf` schreiben, laufenden Server live aktualisieren |
-| `neuvpn status` | Wer ist verbunden, letzter Kontakt, Datenmenge |
-| `neuvpn check [--expect RO]` | Aus welchem Land kommt mein Verkehr gerade? |
-| `neuvpn free [--connect]` | Kostenlose VPN-Gate-Server in Rumänien |
-| `neuvpn server-config` | Server-Konfiguration ausgeben |
+| `neuvpn tor start [--share] [--country RO] [--port 9055]` | Tor mit Ausgang nur in Rumänien starten (macOS: System-Proxy an) |
+| `neuvpn tor stop` / `status` / `new-ip` | Beenden / Status + aktuelle IP / neue IP |
+| `neuvpn free [--serve] [--connect] [--list]` | Kostenlose VPN-Gate-Server in Rumänien |
+| `neuvpn check [--socks 127.0.0.1:9055] [--expect RO]` | Aus welchem Land kommt der Verkehr? |
+| `neuvpn init` / `add` / `show` / `list` / `remove` / `enable` / `disable` / `apply` / `status` | Eigener WireGuard-Server (siehe unten) |
 
-Nützliche `init`-Optionen: `--port`, `--dns 1.1.1.1,1.0.0.1`, `--ipv6` (IPv6 im Tunnel, wenn der Server
-IPv6 hat), `--allow-client-to-client`, `--mtu`, `--wan-interface eth0`.
-Ohne `--ipv6` wird IPv6-Verkehr der Geräte trotzdem in den Tunnel gelenkt und dort verworfen –
-so gibt es kein IPv6-Leck an deiner echten IP vorbei.
+Ports von `neuvpn tor`: SOCKS5 `9055`, HTTPS-Proxy `9056`, Steuerung `9057` (nur lokal).
+Mit `--share` sind SOCKS/HTTPS-Proxy nur für Geräte aus dem lokalen Netz (`192.168.x.x` usw.) erlaubt.
 
-Gerät nur für das Heimnetz in Rumänien statt für alles (Split-Tunnel):
-`neuvpn add nas --allowed-ips 10.8.0.0/24,192.168.1.0/24`
+---
 
-## Sicherheit
-- Alle Schlüssel liegen nur auf dem Server in `/etc/neuvpn` (Rechte `600`) – niemals ins Git hochladen.
-- Jede Verbindung nutzt zusätzlich einen eigenen Preshared Key (Schutz gegen künftige Quantenangriffe).
-- Verlorenes Handy? `sudo neuvpn remove handy && sudo neuvpn apply` – sofort gesperrt.
-- Server aktuell halten: `sudo apt update && sudo apt upgrade` (Raspberry Pi: `unattended-upgrades` aktivieren).
-- Deinstallieren: `sudo ./scripts/uninstall-server.sh` (mit `--purge` inkl. Schlüssel).
+## Später: eigener WireGuard-Server (schnellstes & privatestes VPN)
 
-## Projektaufbau
+Falls du irgendwann einen Server in Rumänien hast (Raspberry Pi bei Bekannten oder ein günstiger
+rumänischer VPS für ca. 2–5 €/Monat), macht `neuvpn` daraus ein vollwertiges WireGuard-VPN:
+```bash
+sudo ./scripts/install-server.sh --duckdns meinvpn-ro DEIN-DUCKDNS-TOKEN   # auf dem Server
+sudo neuvpn add handy --qr && sudo neuvpn apply                            # weiteres Gerät
 ```
-neuvpn/            Python-Paket (CLI, Schlüssel, Konfiguration, VPN Gate, Geo-Check)
-scripts/           install-server.sh, uninstall-server.sh, duckdns-update.sh
-docker/            Dockerfile + Entrypoint;  docker-compose.yml im Hauptordner
-tests/             Unit-Tests (python3 -m unittest discover -s tests -t .)
-tests/e2e/         Ende-zu-Ende-Test mit echten WireGuard-Tunneln (sudo tests/e2e/netns_test.sh)
-```
+Das Skript installiert WireGuard, richtet NAT, kostenloses DynDNS ([DuckDNS](https://www.duckdns.org)) und
+Autostart ein, **prüft, ob der Server wirklich in Rumänien steht**, und zeigt einen QR-Code für die
+WireGuard-App. Zu Hause am Router dann **UDP 51820** auf den Server weiterleiten. Als Docker-Variante:
+`NEUVPN_ENDPOINT=meinvpn-ro.duckdns.org docker compose up -d --build`.
+Deinstallieren: `sudo ./scripts/uninstall-server.sh [--purge]`.
 
-Der Ende-zu-Ende-Test baut in Linux-Netzwerk-Namespaces ein Mini-Internet mit einem „rumänischen“
-Server und einem Client auf, verbindet beide über `neuvpn` und prüft, dass der Client-Verkehr über
-den Server herauskommt, Live-Updates funktionieren und gesperrte Geräte sofort rausfliegen.
+Eigenschaften: Preshared Key pro Gerät, Geräte live hinzufügen/sperren (`wg syncconf`), Geräte
+untereinander isoliert, IPv6-Leckschutz, DNS über Quad9, optional IPv6 im Tunnel (`init --ipv6`).
+
+---
+
+## Verwandte Open-Source-Projekte (Recherche)
+- Tor mit Länder-Ausgang: [torsystem](https://github.com/amgpulse/torsystem), [vpndesk](https://github.com/sandipbera35/vpndesk)
+- VPN-Gate-Clients: [davegallant/vpngate](https://github.com/davegallant/vpngate), [vpnclient](https://github.com/bonheur15/vpnclient), [autovpn2](https://github.com/ruped24/autovpn2)
+- Eigene WireGuard-Server: [awesome-wireguard](https://github.com/cedrickchee/awesome-wireguard) (wg-easy, Firezone, NetBird, Headscale …)
+- Nicht Open-Source-Dienst, aber kostenlos: Proton VPN Free hat Rumänien unter den Gratis-Ländern,
+  [das Land lässt sich dort aber nicht auswählen](https://protonvpn.com/support/change-server-free-plan).
+
+## Entwicklung & Tests
+```
+neuvpn/        Python-Paket ohne Abhängigkeiten (tor, vpngate, geo, WireGuard-Verwaltung)
+scripts/       mac-setup.sh, install-server.sh, uninstall-server.sh, duckdns-update.sh
+docker/        Dockerfile + Entrypoint (WireGuard-Server)
+tests/         python3 -m unittest discover -s tests -t .
+tests/e2e/     sudo tests/e2e/netns_test.sh – echte WireGuard-Tunnel in Netzwerk-Namespaces
+```
 
 Lizenz: MIT

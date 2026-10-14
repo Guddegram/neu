@@ -37,3 +37,32 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f docker/Dockerfile -t neuvpn .
       - run: docker run --rm --entrypoint neuvpn neuvpn --version
+
+  # Real Tor network: is the exit really in Romania?
+  tor-romania-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor tor-geoipdb
+      - run: python3 -m neuvpn tor start --timeout 300
+      - run: python3 -m neuvpn tor status
+      - run: python3 -m neuvpn check --socks 127.0.0.1:9055 --expect RO
+      - run: python3 -m neuvpn tor new-ip
+      - if: always()
+        run: python3 -m neuvpn tor stop
+
+  tor-romania-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Mac-Einrichtung wie beim Nutzer
+        run: ./scripts/mac-setup.sh
+      - name: Schreibtisch-Dateien vorhanden
+        run: test -x "$HOME/Desktop/Rumänien-VPN an.command" && test -x "$HOME/Desktop/Rumänien-VPN aus.command"
+      - name: Einschalten (inkl. macOS-System-Proxy)
+        run: neuvpn tor start --timeout 300
+      - run: networksetup -getsocksfirewallproxy Ethernet || networksetup -getsocksfirewallproxy Wi-Fi || true
+      - run: neuvpn check --socks 127.0.0.1:9055 --expect RO
+      - name: Ausschalten
+        if: always()
+        run: neuvpn tor stop

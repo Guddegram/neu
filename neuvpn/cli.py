@@ -9,7 +9,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import __version__, geo, qr, vpngate
+from . import __version__, geo, qr, tor, vpngate
 from .config import (
     DEFAULT_PORT,
     DEFAULT_SUBNET,
@@ -237,7 +237,8 @@ def cmd_check(args) -> int:
             expect = load_state(_data_dir(args)).country
         except NeuVPNError:
             expect = "RO"
-    ip, country, city = geo.lookup(urls=args.url or None)
+    socks = _parse_hostport(args.socks) if args.socks else None
+    ip, country, city = geo.lookup(urls=args.url or None, socks=socks)
     where = _country(country) if country else "unbekannt"
     print(f"Öffentliche IP: {ip}\nStandort:       {where}" + (f", {city}" if city else ""))
     if country == expect.upper():
@@ -276,12 +277,150 @@ def cmd_free(args) -> int:
     print("\n✔ OpenVPN-Profile gespeichert:")
     for path in written:
         print(f"  {path}")
+    if args.serve:
+        _serve_profiles(out_dir, args.serve_port)
+        return 0
     if args.connect:
         if not shutil.which("openvpn"):
             raise NeuVPNError("openvpn ist nicht installiert (sudo apt install openvpn).")
         print(f"\nVerbinde mit {servers[0].hostname} … (Strg+C zum Trennen)")
         os.execvp("openvpn", ["openvpn", "--config", str(written[0])])
     print("\nVerbinden: sudo openvpn --config <datei>  oder Datei in OpenVPN Connect importieren.")
+    return 0
+
+
+def _parse_hostport(value: str) -> tuple[str, int]:
+    host, _, port = value.rpartition(":")
+    if not host or not port.isdigit():
+        raise NeuVPNError(f"Erwartet HOST:PORT, z. B. 127.0.0.1:9055 – nicht {value!r}")
+    return host, int(port)
+
+
+def _serve_profiles(directory: Path, port: int) -> None:
+    import functools
+    import http.server
+
+    class Handler(http.server.SimpleHTTPRequestHandler):
+        # lets iOS/Android hand the file straight to OpenVPN Connect
+        extensions_map = {
+            **http.server.SimpleHTTPRequestHandler.extensions_map,
+            ".ovpn": "application/x-openvpn-profile",
+        }
+
+    handler = functools.partial(Handler, directory=str(directory))
+    server = http.server.ThreadingHTTPServer(("0.0.0.0", port), handler)
+    addresses = tor.lan_addresses() or ["<IP-dieses-Rechners>"]
+    url = f"http://{addresses[0]}:{port}/"
+    print(f"\nHandy im selben WLAN: QR-Code scannen oder {url} öffnen,")
+    print("Profil antippen und in 'OpenVPN Connect' öffnen. Beenden mit Strg+C.\n")
+    _print_qr(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\nBereitstellung beendet.")
+    finally:
+        server.server_close()
+
+
+def _tor_paths(args) -> tor.TorPaths:
+    return tor.TorPaths(_data_dir(args) / "tor")
+
+
+def _tor_ports(paths: tor.TorPaths) -> dict[str, int]:
+    ports = {}
+    try:
+        for line in paths.torrc.read_text(encoding="utf-8").splitlines():
+            key = line.split(" ")[0]
+            if key in ("SocksPort", "HTTPTunnelPort", "ControlPort"):
+                ports[key] = int(line.rsplit(":", 1)[1])
+    except FileNotFoundError:
+        pass
+    return ports
+
+
+def cmd_tor_start(args) -> int:
+    paths = _tor_paths(args)
+    socks_port, http_port, control_port = args.port, args.port + 1, args.port + 2
+    country = args.country.upper()
+    torrc = tor.build_torrc(paths, country, socks_port, http_port, control_port, share=args.share)
+    print(f"Starte Tor mit Ausgang nur in {_country(country)} …")
+
+    def progress(percent: int) -> None:
+        print(f"  Verbindungsaufbau {percent:3d}%", flush=True)
+
+    try:
+        tor.start(paths, torrc, timeout=args.timeout, progress=progress)
+    except tor.TorError as exc:
+        raise NeuVPNError(str(exc)) from None
+    try:
+        ip, got, city = geo.lookup(socks=("127.0.0.1", socks_port), timeout=30)
+        where = f"{_country(got) if got else 'unbekannt'}" + (f", {city}" if city else "")
+        print(f"✔ Verbunden – öffentliche IP {ip} ({where})")
+        if got and got != country:
+            print(f"! Achtung: Ausgang ist nicht in {_country(country)}.")
+    except OSError:
+        print("✔ Verbunden (Standort konnte nicht geprüft werden).")
+    if tor.is_mac() and args.system_proxy:
+        changed = tor.set_mac_system_proxy(paths, socks_port, http_port, enable=True)
+        if changed:
+            print(f"✔ macOS-Proxy aktiv für: {', '.join(changed)} – Safari, Chrome & Co. laufen jetzt über "
+                  f"{_country(country)}.")
+        else:
+            print("! macOS-Proxy konnte nicht gesetzt werden (Admin-Passwort?).")
+    else:
+        print(f"Proxy: SOCKS5 127.0.0.1:{socks_port}  |  HTTPS-Proxy 127.0.0.1:{http_port}")
+    if args.share:
+        lan = tor.lan_addresses() or ["<IP-dieses-Rechners>"]
+        print(
+            "\nHandy im selben WLAN (iPhone: Einstellungen › WLAN › ⓘ › Proxy konfigurieren › Manuell;\n"
+            "Android: WLAN lange drücken › Netzwerk ändern › Proxy › Manuell):\n"
+            f"  Server {lan[0]}   Port {http_port}\n"
+            "  Hinweis: so laufen HTTPS-Seiten (fast alle) über Rumänien."
+        )
+    print("\nBeenden mit: neuvpn tor stop   |   neue IP: neuvpn tor new-ip")
+    return 0
+
+
+def cmd_tor_stop(args) -> int:
+    paths = _tor_paths(args)
+    if tor.is_mac() and paths.proxy_state.exists():
+        tor.set_mac_system_proxy(paths, 0, 0, enable=False)
+        print("✔ macOS-Proxy zurückgestellt")
+    if tor.stop(paths):
+        print("✔ Tor beendet – du surfst wieder mit deiner normalen IP.")
+    else:
+        print("Tor lief nicht.")
+    return 0
+
+
+def cmd_tor_status(args) -> int:
+    paths = _tor_paths(args)
+    pid = tor.running_pid(paths)
+    if not pid:
+        print("Tor läuft nicht. Starten mit: neuvpn tor start")
+        return 1
+    ports = _tor_ports(paths)
+    print(f"Tor läuft (PID {pid}), SOCKS 127.0.0.1:{ports.get('SocksPort')}, "
+          f"HTTPS-Proxy :{ports.get('HTTPTunnelPort')}")
+    try:
+        ip, country, city = geo.lookup(socks=("127.0.0.1", ports["SocksPort"]), timeout=30)
+        print(f"Öffentliche IP {ip} – {_country(country) if country else 'unbekannt'}"
+              + (f", {city}" if city else ""))
+    except (OSError, KeyError) as exc:
+        print(f"Standort nicht prüfbar: {exc}")
+    return 0
+
+
+def cmd_tor_new_ip(args) -> int:
+    paths = _tor_paths(args)
+    if not tor.running_pid(paths):
+        raise NeuVPNError("Tor läuft nicht.")
+    port = _tor_ports(paths).get("ControlPort", tor.DEFAULT_CONTROL_PORT)
+    try:
+        tor.new_identity(paths, port)
+    except (tor.TorError, OSError) as exc:
+        raise NeuVPNError(f"Neue IP nicht möglich: {exc}") from None
+    print("✔ Neue Verbindung angefordert – neue Webseiten-Aufrufe bekommen eine neue rumänische IP.")
     return 0
 
 
@@ -354,6 +493,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("check", help="Prüfen, aus welchem Land dein Verkehr kommt")
     s.add_argument("--expect", help="Erwarteter Ländercode (Standard: Server-Standort bzw. RO)")
     s.add_argument("--url", action="append", help="Eigener Geo-IP-Dienst (JSON)")
+    s.add_argument("--socks", help="Über SOCKS5-Proxy prüfen, z. B. 127.0.0.1:9055 (Tor)")
     s.set_defaults(func=cmd_check)
 
     s = sub.add_parser("free", help="Sofort & kostenlos: öffentliche VPN-Gate-Server in Rumänien")
@@ -363,7 +503,29 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--out-dir", default="vpngate-profile")
     s.add_argument("--connect", action="store_true", help="Direkt mit dem besten Server verbinden")
     s.add_argument("--from-file", help="Serverliste aus Datei statt Internet (CSV der VPN-Gate-API)")
+    s.add_argument("--serve", action="store_true",
+                   help="Profile im WLAN bereitstellen – mit dem Handy per QR-Code herunterladen")
+    s.add_argument("--serve-port", type=int, default=8765)
     s.set_defaults(func=cmd_free)
+
+    t = sub.add_parser("tor", help="Lokal & kostenlos: Tor mit Ausgang nur in Rumänien")
+    tsub = t.add_subparsers(dest="tor_command", required=True)
+    s = tsub.add_parser("start", help="Starten und System-Proxy (macOS) umstellen")
+    s.add_argument("--country", default="RO")
+    s.add_argument("--port", type=int, default=tor.DEFAULT_SOCKS_PORT,
+                   help="SOCKS-Port (HTTP-Tunnel = Port+1, Steuerung = Port+2)")
+    s.add_argument("--no-system-proxy", dest="system_proxy", action="store_false",
+                   help="macOS-System-Proxy nicht umstellen")
+    s.add_argument("--share", action="store_true",
+                   help="Auch für Handys im selben WLAN freigeben (iPhone/Android-Proxy)")
+    s.add_argument("--timeout", type=int, default=tor.BOOTSTRAP_TIMEOUT)
+    s.set_defaults(func=cmd_tor_start)
+    s = tsub.add_parser("stop", help="Beenden und System-Proxy zurückstellen")
+    s.set_defaults(func=cmd_tor_stop)
+    s = tsub.add_parser("status", help="Läuft Tor? Aus welchem Land kommt der Verkehr?")
+    s.set_defaults(func=cmd_tor_status)
+    s = tsub.add_parser("new-ip", help="Neue rumänische IP anfordern")
+    s.set_defaults(func=cmd_tor_new_ip)
     return p
 
 
