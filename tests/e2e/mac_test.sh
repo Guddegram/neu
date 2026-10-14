@@ -6,8 +6,21 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 pass() { printf '  \033[32m✔\033[0m %s\n' "$*"; }
 fail() { printf '  \033[31m✘\033[0m %s\n' "$*"; exit 1; }
-country() { python3 -c 'import json,sys; print(json.load(sys.stdin).get("country",""))' 2>/dev/null || true; }
+# country seen through a proxy; several services because some answer Tor exits with 403
+country_via() {
+  local url c
+  for url in https://ipinfo.io/json https://ifconfig.co/json http://ip-api.com/json; do
+    c="$(curl -sS --max-time 90 --proxy "$1" "$url" 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+print(next((v for k in ("country_iso", "countryCode", "country") if len(v := str(d.get(k, ""))) == 2), ""))
+' 2>/dev/null || true)"
+    if [ -n "$c" ]; then echo "$c"; return; fi
+  done
+}
 proxy_service() { networksetup -listallnetworkservices | sed 1d | grep -v '^\*' | head -1; }
+
+trap 'neuvpn tor stop >/dev/null 2>&1 || true' EXIT
 
 echo "== Einrichtung wie beim Nutzer"
 "$REPO/scripts/mac-setup.sh"
@@ -27,10 +40,10 @@ echo "== Safari und Chrome"
 echo "== Handy im selben WLAN (benutzt den Mac als Proxy)"
 LAN="$(PYTHONPATH="$REPO" python3 -c 'from neuvpn import tor; print(tor.lan_addresses()[0])')"
 echo "   Mac-IP im Netz: $LAN"
-c="$(curl -sS --max-time 90 --proxy "http://$LAN:9056" https://ipinfo.io/json | country)"
+c="$(country_via "http://$LAN:9056")"
 [ "$c" = RO ] || fail "HTTPS über Proxy $LAN:9056 (iPhone-Einstellung) kommt aus '$c'"
 pass "iPhone-Weg: HTTPS-Seiten über $LAN:9056 kommen aus Rumänien"
-c="$(curl -sS --max-time 90 --proxy "socks5h://$LAN:9055" https://ipinfo.io/json | country)"
+c="$(country_via "socks5h://$LAN:9055")"
 [ "$c" = RO ] || fail "SOCKS über $LAN:9055 kommt aus '$c'"
 pass "SOCKS-Weg: $LAN:9055 kommt aus Rumänien"
 c="$(curl -sS --max-time 90 --proxy "http://$LAN:9056" http://ip-api.com/json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("countryCode",""))' 2>/dev/null || true)"

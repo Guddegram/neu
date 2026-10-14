@@ -10,6 +10,10 @@ import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from neuvpn import geo  # noqa: E402
 
 PKG = "org.torproject.android"
 # dialogs that may show up on first start (Android, Orbot, Chrome first-run)
@@ -71,38 +75,43 @@ def wait_for(pattern: str, timeout: int, tap_it: bool = True, dismiss=DISMISS, s
         extra = next((n for p in dismiss for n in nodes if re.fullmatch(p, n[0], re.I)), None)
         if extra:
             tap(extra)
-        elif scroll:
-            adb("shell", "input", "swipe", "540", "1900", "540", "1100", "400")
+        elif scroll and len(nodes) > 2:
+            ys = sorted(n[2] for n in nodes[1:])
+            x = nodes[-1][1]
+            adb("shell", "input", "swipe", str(x), str(ys[-1]), str(x), str(ys[0]), "600")
         time.sleep(2)
     raise TimeoutError(f"'{pattern}' nicht gefunden")
 
 
 def country_via_socks() -> str | None:
     adb("forward", "tcp:19050", "tcp:9050")
-    out = subprocess.run(
-        ["curl", "-sS", "--max-time", "60", "--socks5-hostname", "127.0.0.1:19050",
-         "https://ipinfo.io/json"],
-        capture_output=True, text=True,
-    )
-    print("   ipinfo über Orbot-SOCKS:", (out.stdout or out.stderr).replace("\n", " ")[:200])
-    m = re.search(r'"country"\s*:\s*"([A-Z]{2})"', out.stdout)
-    return m.group(1) if m else None
+    try:
+        ip, country, city = geo.lookup(socks=("127.0.0.1", 19050), timeout=60)
+    except OSError as exc:
+        print("   Standort über Orbot-SOCKS nicht prüfbar:", str(exc).replace("\n", " ")[:300])
+        return None
+    print(f"   Orbot-SOCKS: IP {ip}, Land {country}, {city}")
+    return country
 
 
 def country_in_chrome() -> str | None:
-    adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d",
-        "https://ipinfo.io/json", "-p", "com.android.chrome")
-    deadline = time.time() + 120
-    while time.time() < deadline:
-        nodes = screen()
-        text = " ".join(n[0] for n in nodes)
-        m = re.search(r'"?country"?\s*:\s*"?([A-Z]{2})"?', text)
-        if m:
-            return m.group(1)
-        extra = next((n for p in DISMISS for n in nodes if re.fullmatch(p, n[0], re.I)), None)
-        if extra:
-            tap(extra)
-        time.sleep(3)
+    rx = re.compile(r'"?(?:country_iso|countryCode|country)"?\s*:\s*"?([A-Z]{2})"?')
+    for url in geo.GEO_SERVICES:
+        print(f"   Chrome öffnet {url}", flush=True)
+        adb("shell", "am", "start", "-a", "android.intent.action.VIEW", "-d", url,
+            "-p", "com.android.chrome")
+        deadline = time.time() + 90
+        while time.time() < deadline:
+            nodes = screen()
+            m = rx.search(" ".join(n[0] for n in nodes))
+            if m:
+                return m.group(1)
+            if any("403" in n[0] or "Forbidden" in n[0] for n in nodes):
+                break
+            extra = next((n for p in DISMISS for n in nodes if re.fullmatch(p, n[0], re.I)), None)
+            if extra:
+                tap(extra)
+            time.sleep(3)
     return None
 
 
@@ -114,8 +123,8 @@ def main(apk: str) -> int:
     print("== Orbot öffnen und 'Connect' tippen", flush=True)
     adb("shell", "am", "start", "-n", f"{PKG}/.OrbotActivity")
     wait_for(r"Connect", 120)
-    print("== Warten bis verbunden ('Change exit' erscheint)", flush=True)
-    wait_for(r"Change exit", 600, tap_it=False, dismiss=[d for d in DISMISS if d != r"Next"])
+    print("== Warten bis 'Connected'", flush=True)
+    wait_for(r"Connected", 600, tap_it=False, dismiss=[d for d in DISMISS if d != r"Next"])
 
     before = country_via_socks()
     print(f"   Ausgangsland vor der Auswahl: {before}")

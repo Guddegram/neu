@@ -11,22 +11,27 @@ import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
-URL = "https://ipinfo.io/json"
+# same services as neuvpn check; some sites answer Tor exits with "403 Forbidden"
+URLS = ["https://ipinfo.io/json", "https://ifconfig.co/json", "http://ip-api.com/json"]
+COUNTRY = re.compile(r'"(?:country_iso|countryCode|country)"\s*:\s*"([A-Z]{2})"')
+IP = re.compile(r'"(?:ip|query)"\s*:\s*"([^"]+)"')
 
 
 def read_country(driver) -> tuple[str | None, str | None, str]:
     driver.set_page_load_timeout(120)
-    for attempt in range(3):
+    text = ""
+    for url in URLS:
         try:
-            driver.get(URL)
+            driver.get(url)
             text = driver.find_element(By.TAG_NAME, "body").text
-            country = re.search(r'"country"\s*:\s*"([A-Z]{2})"', text)
+            country = COUNTRY.search(text)
             if country:
-                ip = re.search(r'"ip"\s*:\s*"([^"]+)"', text)
-                return country.group(1), ip.group(1) if ip else None, text
-        except Exception as exc:  # page load through Tor can time out once
-            text = f"{type(exc).__name__}: {exc}"
-        time.sleep(5)
+                ip = IP.search(text)
+                return country.group(1), ip.group(1) if ip else None, f"{url}: {text}"
+        except Exception as exc:  # a page load through Tor can time out
+            text = f"{url}: {type(exc).__name__}: {exc}"
+        print("   kein Ergebnis von", text[:160].replace("\n", " "))
+        time.sleep(3)
     return None, None, text
 
 
