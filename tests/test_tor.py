@@ -202,16 +202,33 @@ class MacProxyTest(unittest.TestCase):
             )
             self.assertFalse(paths.proxy_state.exists())
 
-    def test_falls_back_to_sudo(self):
+    def test_failed_commands_ask_for_password_once(self):
         calls = []
 
         def fake_run(cmd, **kwargs):
             calls.append(cmd)
-            return subprocess.CompletedProcess(cmd, 0 if cmd[0] == "sudo" else 14, stdout="", stderr="")
+            ok = cmd[0] == "osascript"  # plain networksetup fails ("requires admin")
+            return subprocess.CompletedProcess(cmd, 0 if ok else 14, stdout="", stderr="")
 
-        with mock.patch.object(tor.subprocess, "run", fake_run):
-            self.assertEqual(tor._networksetup("-x").returncode, 0)
-        self.assertEqual(calls, [["networksetup", "-x"], ["sudo", "networksetup", "-x"]])
+        with mock.patch.object(tor.subprocess, "run", fake_run), \
+                mock.patch.object(tor.sys.stdin, "isatty", return_value=False):
+            results = tor._networksetup_all([["-a", "Wi-Fi"], ["-b", "it's"]])
+        self.assertEqual(results, [True, True])
+        self.assertEqual(calls[:2], [["networksetup", "-a", "Wi-Fi"], ["networksetup", "-b", "it's"]])
+        self.assertEqual(len(calls), 3)  # one password dialog for both commands
+        self.assertEqual(calls[2][:2], ["osascript", "-e"])
+        self.assertEqual(calls[2][2], "do shell script \"'networksetup' '-a' 'Wi-Fi' && "
+                                      "'networksetup' '-b' 'it'\\\\''s'\" with administrator privileges")
+
+    def test_recover_proxy_after_crash(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(tor, "is_mac", return_value=True), \
+                mock.patch.object(tor, "set_mac_system_proxy") as setp:
+            paths = tor.TorPaths(Path(tmp))
+            self.assertFalse(tor.recover_system_proxy(paths))  # nothing to do
+            paths.proxy_state.write_text("Wi-Fi")
+            self.assertTrue(tor.recover_system_proxy(paths))  # proxy on, tor gone
+            setp.assert_called_once_with(paths, 0, 0, enable=False)
 
 
 class _GeoHandler(http.server.BaseHTTPRequestHandler):

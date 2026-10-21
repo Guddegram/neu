@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: write  # publish the Mac app as a release
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -15,13 +18,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: python -m unittest discover -s tests -t . -v
+      - run: sudo apt-get install -y -qq xvfb  # virtual screen for the app (GUI) tests
+      - run: xvfb-run -a python -m unittest discover -s tests -t . -v
 
   shellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -S warning scripts/*.sh docker/entrypoint.sh tests/e2e/netns_test.sh
+      - run: shellcheck -S warning scripts/*.sh app/*.sh docker/entrypoint.sh tests/e2e/*.sh
 
   e2e:
     runs-on: ubuntu-latest
@@ -80,3 +84,44 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: python3 tests/e2e/orbot_android.py orbot.apk
+
+  # The Mac app: build it, then test the finished .app like a user (no Homebrew, no terminal)
+  mac-app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest       # Apple Silicon (M1/M2/M3/M4)
+          - runner: macos-15-intel     # Intel Macs
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: app/build_mac_app.sh
+      - run: tests/e2e/mac_app_test.sh dist/Rumaenien-VPN-mac-*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-${{ matrix.runner }}
+          path: dist/Rumaenien-VPN-mac-*.zip
+
+  # Download page for the user: GitHub release "mac-app" with both zips
+  release-mac-app:
+    needs: mac-app
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: zips
+          merge-multiple: true
+      - name: Release "mac-app" aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete mac-app --yes --cleanup-tag || true
+          gh release create mac-app zips/*.zip --target "$GITHUB_SHA" \
+            --title "Rumänien-VPN für Mac" \
+            --notes "Apple Silicon (M1–M4): Rumaenien-VPN-mac-arm64.zip · Intel-Mac: Rumaenien-VPN-mac-x86_64.zip. Anleitung: README, Abschnitt 'Mac-App'."

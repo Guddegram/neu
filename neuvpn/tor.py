@@ -25,6 +25,7 @@ BOOTSTRAP_TIMEOUT = 300
 STALL_TIMEOUT = 90  # restart tor if the bootstrap is stuck this long
 
 _HTTP_MARKER = "# neuvpn-http-proxy"
+HTTP_PROXY_FLAG = "--neuvpn-http-proxy"
 _PRIVATE_NETS = ["127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
 
 
@@ -93,6 +94,11 @@ def build_torrc(
         # new circuit every 10 minutes at most, keeps the IP stable while browsing
         "MaxCircuitDirtiness 600",
     ]
+    bundle = bundled_tor_dir()
+    if bundle and (bundle / "data" / "geoip").exists():
+        # the bundled tor has no compiled-in GeoIP path; needed for ExitNodes {ro}
+        lines.append(f"GeoIPFile {_quote(bundle / 'data' / 'geoip')}")
+        lines.append(f"GeoIPv6File {_quote(bundle / 'data' / 'geoip6')}")
     if share:
         # only devices from the local network may use the proxy
         lines += [f"SocksPolicy accept {net}" for net in _PRIVATE_NETS]
@@ -105,7 +111,22 @@ def _quote(path: Path) -> str:
     return '"' + str(path).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def bundled_tor_dir() -> Path | None:
+    """Tor Expert Bundle shipped inside the Mac app (Contents/Resources/tor-bundle)."""
+    env = os.environ.get("NEUVPN_TOR_BUNDLE")
+    if env:
+        return Path(env)
+    if getattr(sys, "frozen", False):
+        candidate = Path(sys.executable).resolve().parent.parent / "Resources" / "tor-bundle"
+        if candidate.is_dir():
+            return candidate
+    return None
+
+
 def find_tor() -> str:
+    bundle = bundled_tor_dir()
+    if bundle and os.access(bundle / "tor" / "tor", os.X_OK):
+        return str(bundle / "tor" / "tor")
     tor = shutil.which("tor")
     if tor:
         return tor
@@ -261,7 +282,10 @@ def _log_tail(paths: TorPaths, lines: int = 8) -> str:
 
 def _start_http_proxy(paths: TorPaths, listen: tuple[str, int], socks_port: int) -> None:
     host, port = listen
-    cmd = [sys.executable, "-m", "neuvpn.httpproxy", host, str(port), str(socks_port)]
+    if getattr(sys, "frozen", False):  # Mac app: the app binary runs the proxy itself
+        cmd = [sys.executable, HTTP_PROXY_FLAG, host, str(port), str(socks_port)]
+    else:
+        cmd = [sys.executable, "-m", "neuvpn.httpproxy", host, str(port), str(socks_port)]
     if host == "0.0.0.0":
         cmd.append("--lan-only")
     env = dict(os.environ)
@@ -331,12 +355,34 @@ def lan_addresses() -> list[str]:
 # ---- macOS system proxy -----------------------------------------------
 
 
-def _networksetup(*args: str) -> subprocess.CompletedProcess:
-    cmd = ["networksetup", *args]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if result.returncode != 0 or "requires admin" in (result.stdout + result.stderr).lower():
-        result = subprocess.run(["sudo", *cmd], capture_output=True, text=True, check=False)
-    return result
+def _run_privileged(commands: list[list[str]]) -> bool:
+    """Run commands as admin: sudo in a terminal, the macOS password dialog otherwise."""
+    if sys.stdin and sys.stdin.isatty():
+        return all(subprocess.run(["sudo", *c], check=False).returncode == 0 for c in commands)
+    script = " && ".join(" ".join(_sh_quote(a) for a in c) for c in commands)
+    applescript = f'do shell script "{_as_quote(script)}" with administrator privileges'
+    return subprocess.run(["osascript", "-e", applescript], capture_output=True, check=False).returncode == 0
+
+
+def _sh_quote(arg: str) -> str:
+    return "'" + arg.replace("'", "'\\''") + "'"
+
+
+def _as_quote(text: str) -> str:
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _networksetup_all(commands: list[list[str]]) -> list[bool]:
+    """Run networksetup commands; failed ones are retried together with admin rights."""
+    results = []
+    for args in commands:
+        r = subprocess.run(["networksetup", *args], capture_output=True, text=True, check=False)
+        results.append(r.returncode == 0 and "requires admin" not in (r.stdout + r.stderr).lower())
+    failed = [i for i, ok in enumerate(results) if not ok]
+    if failed and _run_privileged([["networksetup", *commands[i]] for i in failed]):
+        for i in failed:
+            results[i] = True
+    return results
 
 
 def mac_network_services() -> list[str]:
@@ -375,15 +421,22 @@ def set_mac_system_proxy(paths: TorPaths, socks_port: int, http_port: int, enabl
         except FileNotFoundError:
             services = mac_network_services()
         paths.proxy_state.unlink(missing_ok=True)
-    changed = []
-    for service in services:
-        ok = all(
-            _networksetup(*cmd).returncode == 0
-            for cmd in mac_proxy_commands(service, socks_port, http_port, enable)
-        )
-        if ok:
+    per_service = [mac_proxy_commands(svc, socks_port, http_port, enable) for svc in services]
+    results = _networksetup_all([cmd for cmds in per_service for cmd in cmds])
+    changed, i = [], 0
+    for service, cmds in zip(services, per_service):
+        if all(results[i:i + len(cmds)]):
             changed.append(service)
+        i += len(cmds)
     return changed
+
+
+def recover_system_proxy(paths: TorPaths) -> bool:
+    """After a crash: proxy still points to a tor that no longer runs -> switch it off."""
+    if is_mac() and paths.proxy_state.exists() and not running_pid(paths):
+        set_mac_system_proxy(paths, 0, 0, enable=False)
+        return True
+    return False
 
 
 def is_mac() -> bool:
