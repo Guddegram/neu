@@ -17,11 +17,35 @@ Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalte
 
 ---
 
-## 💻 Mac
+## 💻 Mac – die App „Rumänien-VPN“ (ohne Terminal)
 
-### Einmalig einrichten (5 Minuten)
+### Einmalig installieren
+1. Download-Seite öffnen: **[github.com/Guddegram/neu/releases/tag/mac-app](https://github.com/Guddegram/neu/releases/tag/mac-app)**
+2. Die passende Datei laden – welche, steht im Apple-Menü (oben links) › **Über diesen Mac**:
+   - „Chip: Apple M1/M2/M3/M4 …“ → **Rumaenien-VPN-mac-arm64.zip**
+   - „Prozessor: Intel …“ → **Rumaenien-VPN-mac-x86_64.zip**
+3. Die ZIP-Datei im Download-Ordner doppelklicken → **Rumaenien-VPN** erscheint.
+   Diese App in den Ordner **Programme** ziehen.
+4. **Erstes Öffnen** (nur einmal nötig, weil die App nicht bei Apple registriert ist):
+   - App doppelklicken → macOS meldet, dass sie nicht geöffnet werden kann → **Fertig** klicken.
+   - **Systemeinstellungen › Datenschutz & Sicherheit** öffnen, ganz nach unten scrollen →
+     bei „Rumaenien-VPN wurde blockiert“ auf **Dennoch öffnen** klicken → Passwort eingeben →
+     **Öffnen**.
+
+### Benutzen
+- App öffnen → **Einschalten**. Nach 10–60 Sekunden steht da **„An – Rumänien“** mit deiner neuen IP.
+  Beim ersten Einschalten fragt macOS nach deinem Passwort (für die Proxy-Einstellung des Macs).
+- **Neue rumänische IP**: wechselt die IP, bleibt in Rumänien.
+- **Handy im selben WLAN mitnutzen**: vor dem Einschalten anhaken – die App zeigt dann Server und
+  Port, die du am Handy einträgst (siehe unten, Handy Variante 2).
+- **Ausschalten** oder einfach das **Fenster schließen** → normale IP. Falls der Mac abstürzt,
+  stellt die App beim nächsten Öffnen die Proxy-Einstellung automatisch zurück.
+
+Die App bringt alles mit (auch Tor vom offiziellen Tor-Projekt) – kein Homebrew, kein Terminal.
+
+### Alternative: Einrichtung mit Terminal (für Fortgeschrittene)
 1. **Terminal** öffnen (Programme › Dienstprogramme › Terminal).
-2. Falls noch nicht vorhanden, [Homebrew](https://brew.sh) installieren (kostenloser Paketmanager):
+2. Falls noch nicht vorhanden, [Homebrew](https://brew.sh) installieren:
    ```bash
    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
    ```
@@ -30,13 +54,7 @@ Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalte
    git clone https://github.com/guddegram/neu.git && cd neu
    ./scripts/mac-setup.sh
    ```
-
-Danach liegen auf dem Schreibtisch zwei Dateien:
-
-- **„Rumänien-VPN an“** – Doppelklick → nach ca. 10–60 Sekunden surft dein Mac mit rumänischer IP
-- **„Rumänien-VPN aus“** – Doppelklick → wieder normale IP
-
-Beim ersten Mal fragt macOS evtl. nach deinem Passwort (für die Proxy-Einstellungen).
+   Danach liegen auf dem Schreibtisch **„Rumänien-VPN an“** und **„Rumänien-VPN aus“** zum Doppelklicken.
 
 ### Im Terminal
 ```bash
