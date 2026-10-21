@@ -30,6 +30,9 @@ curl -fsSL -o "$WORK/sha256sums.txt" "$BASE/$VERSION/sha256sums-signed-build.txt
 mkdir -p "$WORK/tor-bundle"
 tar -xzf "$WORK/$TARBALL" -C "$WORK/tor-bundle"
 test -x "$WORK/tor-bundle/tor/tor" && test -f "$WORK/tor-bundle/data/geoip"
+# Apple Silicon only runs signed code; the bundle ships libevent unsigned -> sign ad hoc
+find "$WORK/tor-bundle" -type f -perm -u+x -print0 | xargs -0 codesign --force --sign -
+find "$WORK/tor-bundle" -type f -name '*.dylib' -print0 | xargs -0 codesign --force --sign -
 "$WORK/tor-bundle/tor/tor" --version | head -1
 
 echo "== App bauen (PyInstaller)"
