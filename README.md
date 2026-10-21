@@ -20,17 +20,18 @@ Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalte
 ## 💻 Mac – die App „Rumänien-VPN“ (ohne Terminal)
 
 ### Einmalig installieren
-1. Download-Seite öffnen: **[github.com/Guddegram/neu/releases/tag/mac-app](https://github.com/Guddegram/neu/releases/tag/mac-app)**
-2. Die passende Datei laden – welche, steht im Apple-Menü (oben links) › **Über diesen Mac**:
-   - „Chip: Apple M1/M2/M3/M4 …“ → **Rumaenien-VPN-mac-arm64.zip**
-   - „Prozessor: Intel …“ → **Rumaenien-VPN-mac-x86_64.zip**
-3. Die ZIP-Datei im Download-Ordner doppelklicken → **Rumaenien-VPN** erscheint.
-   Diese App in den Ordner **Programme** ziehen.
-4. **Erstes Öffnen** (nur einmal nötig, weil die App nicht bei Apple registriert ist):
-   - App doppelklicken → macOS meldet, dass sie nicht geöffnet werden kann → **Fertig** klicken.
+1. **[Rumaenien-VPN.dmg herunterladen](https://github.com/Guddegram/neu/releases/download/mac-app/Rumaenien-VPN.dmg)**
+   (läuft auf allen Macs ab macOS 11, Apple-Chip und Intel).
+2. Die Datei im Download-Ordner doppelklicken → es öffnet sich ein Fenster mit **Rumänien-VPN**
+   und dem Ordner **Programme**. **Rumänien-VPN auf „Programme“ ziehen.** Fertig installiert.
+3. **Erstes Öffnen** (nur einmal nötig, weil die App nicht bei Apple registriert ist):
+   - Rumänien-VPN in **Programme** (oder über Launchpad/Spotlight) öffnen → macOS meldet, dass sie
+     nicht geöffnet werden kann → **Fertig** klicken.
    - **Systemeinstellungen › Datenschutz & Sicherheit** öffnen, ganz nach unten scrollen →
-     bei „Rumaenien-VPN wurde blockiert“ auf **Dennoch öffnen** klicken → Passwort eingeben →
+     bei „Rumänien-VPN wurde blockiert“ auf **Dennoch öffnen** klicken → Passwort eingeben →
      **Öffnen**.
+
+Danach startet die App wie jedes andere Programm (Programme-Ordner, Launchpad, Spotlight, Dock).
 
 ### Benutzen
 - App öffnen → **Einschalten**. Nach 10–60 Sekunden steht da **„An – Rumänien“** mit deiner neuen IP.
@@ -38,7 +39,7 @@ Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalte
 - **Neue rumänische IP**: wechselt die IP, bleibt in Rumänien.
 - **Handy im selben WLAN mitnutzen**: vor dem Einschalten anhaken – die App zeigt dann Server und
   Port, die du am Handy einträgst (siehe unten, Handy Variante 2).
-- **Ausschalten** oder einfach das **Fenster schließen** → normale IP. Falls der Mac abstürzt,
+- **Ausschalten**, das **Fenster schließen** oder **Cmd+Q** → normale IP. Falls der Mac abstürzt,
   stellt die App beim nächsten Öffnen die Proxy-Einstellung automatisch zurück.
 
 Die App bringt alles mit (auch Tor vom offiziellen Tor-Projekt) – kein Homebrew, kein Terminal.

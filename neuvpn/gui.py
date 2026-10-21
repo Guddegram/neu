@@ -59,6 +59,8 @@ class App:
         self.share_info.grid(row=6, column=0, columnspan=2, pady=(6, 0))
 
         root.protocol("WM_DELETE_WINDOW", self.quit)
+        # macOS: Cmd+Q, "Beenden" im Dock/Menü and logout go through ::tk::mac::Quit
+        root.createcommand("::tk::mac::Quit", self.quit)
         signal.signal(signal.SIGTERM, lambda *_: self.events.put(("quit", None)))
         self.render()
         self.poll_job = root.after(100, self.poll)

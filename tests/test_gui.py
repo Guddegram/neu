@@ -139,6 +139,15 @@ class GuiTest(unittest.TestCase):
         self.assertIsNone(tor.running_pid(app.paths))
         self.assertEqual(json.loads(self.status.read_text())["state"], "closed")
 
+    def test_cmd_q_switches_off(self):
+        self.fake_tor()
+        app = self.gui.App(self.root)
+        app.toggle()
+        self.wait_for(app, "on")
+        self.root.tk.call("::tk::mac::Quit")  # what macOS calls for Cmd+Q / Dock "Beenden"
+        self.assertIsNone(tor.running_pid(app.paths))
+        self.assertEqual(json.loads(self.status.read_text())["state"], "closed")
+
     def test_share_shows_phone_settings(self):
         self.fake_tor()
         with mock.patch.object(tor, "lan_addresses", return_value=["192.168.1.50"]):

@@ -87,43 +87,47 @@ jobs:
           disable-animations: true
           script: python3 tests/e2e/orbot_android.py orbot.apk
 
-  # The Mac app: build it, then test the finished .app like a user (no Homebrew, no terminal)
-  mac-app:
+  # The Mac app: one universal build (Apple chip + Intel) as DMG ...
+  mac-app-build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: app/build_mac_app.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-app-dmg
+          path: dist/Rumaenien-VPN.dmg
+
+  # ... tested like a user on both kinds of Mac (open DMG, install, switch on/off, crash)
+  mac-app-test:
+    needs: mac-app-build
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-latest       # Apple Silicon (M1/M2/M3/M4)
-          - runner: macos-15-intel     # Intel Macs
+        runner: [macos-latest, macos-15-intel]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-      - run: app/build_mac_app.sh
-      - run: tests/e2e/mac_app_test.sh dist/Rumaenien-VPN-mac-*.zip
-      - uses: actions/upload-artifact@v4
-        with:
-          name: mac-app-${{ matrix.runner }}
-          path: dist/Rumaenien-VPN-mac-*.zip
+          name: mac-app-dmg
+      - run: tests/e2e/mac_app_test.sh Rumaenien-VPN.dmg
 
-  # Download page for the user: GitHub release "mac-app" with both zips
+  # Download page for the user: GitHub release "mac-app" with the DMG
   release-mac-app:
-    needs: mac-app
+    needs: mac-app-test
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: zips
-          merge-multiple: true
+          name: mac-app-dmg
       - name: Release "mac-app" aktualisieren
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release delete mac-app --yes --cleanup-tag || true
-          gh release create mac-app zips/*.zip --target "$GITHUB_SHA" \
+          gh release create mac-app Rumaenien-VPN.dmg --target "$GITHUB_SHA" \
             --title "Rumänien-VPN für Mac" \
-            --notes "Apple Silicon (M1–M4): Rumaenien-VPN-mac-arm64.zip · Intel-Mac: Rumaenien-VPN-mac-x86_64.zip. Anleitung: README, Abschnitt 'Mac-App'."
+            --notes "Rumaenien-VPN.dmg laden, öffnen, 'Rumänien-VPN' in 'Programme' ziehen. Läuft auf Macs mit Apple-Chip und Intel (ab macOS 11)."
