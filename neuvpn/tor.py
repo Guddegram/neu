@@ -23,6 +23,7 @@ DEFAULT_HTTP_PORT = 9056  # HTTP proxy (neuvpn.httpproxy) for apps/phones withou
 DEFAULT_CONTROL_PORT = 9057
 BOOTSTRAP_TIMEOUT = 300
 STALL_TIMEOUT = 90  # restart tor if the bootstrap is stuck this long
+WATCH_INTERVAL = 20  # seconds between exit-country checks while connected
 
 _HTTP_MARKER = "# neuvpn-http-proxy"
 HTTP_PROXY_FLAG = "--neuvpn-http-proxy"
@@ -288,6 +289,29 @@ def _log_tail(paths: TorPaths, lines: int = 8) -> str:
     return "\n".join("  " + line for line in text.splitlines()[-lines:])
 
 
+def _exit_country(torrc: str) -> str | None:
+    for line in torrc.splitlines():
+        if line.startswith("ExitNodes {") and line.endswith("}"):
+            return line[len("ExitNodes {"):-1].upper()
+    return None
+
+
+def watch_exit_country(paths: TorPaths, country: str, socks_port: int, control_port: int,
+                       interval: float = WATCH_INTERVAL, stop_event=None) -> None:
+    """Re-check the exit regularly; Tor changes circuits, and single exits may be
+    located elsewhere by the databases websites use."""
+    while True:
+        if stop_event is not None:
+            if stop_event.wait(interval):
+                return
+        else:
+            time.sleep(interval)
+        try:
+            ensure_exit_country(paths, country, socks_port, control_port)
+        except Exception as exc:  # keep watching, whatever happens
+            print(f"Prüfung fehlgeschlagen: {exc}", flush=True)
+
+
 def _start_http_proxy(paths: TorPaths, listen: tuple[str, int], socks_port: int) -> None:
     host, port = listen
     if getattr(sys, "frozen", False):  # Mac app: the app binary runs the proxy itself
@@ -296,6 +320,11 @@ def _start_http_proxy(paths: TorPaths, listen: tuple[str, int], socks_port: int)
         cmd = [sys.executable, "-m", "neuvpn.httpproxy", host, str(port), str(socks_port)]
     if host == "0.0.0.0":
         cmd.append("--lan-only")
+    country = _exit_country(paths.torrc.read_text(encoding="utf-8"))
+    control = torrc_ports(paths.torrc.read_text(encoding="utf-8")).get("control")
+    if country and control:
+        # keep checking the exit like a website does while tor runs (see ensure_exit_country)
+        cmd += ["--watch", country, str(paths.base), str(control[1])]
     env = dict(os.environ)
     package_root = str(Path(__file__).resolve().parents[1])
     env["PYTHONPATH"] = os.pathsep.join(filter(None, [package_root, env.get("PYTHONPATH")]))

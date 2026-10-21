@@ -35,12 +35,24 @@ networksetup -getsocksfirewallproxy "$(proxy_service)" | grep -q "Enabled: Yes" 
 pass "macOS-Proxy aktiv"
 
 echo "== Safari und Chrome"
-/tmp/selenium-venv/bin/python "$REPO/tests/e2e/mac_browsers.py" RO || fail "Browser nicht über Rumänien"
+ok=""
+for attempt in 1 2 3 4; do
+  if /tmp/selenium-venv/bin/python "$REPO/tests/e2e/mac_browsers.py" RO; then ok=1; break; fi
+  echo "   Versuch $attempt: noch nicht RO – Korrektur des Ausgangs abwarten (25 s)"
+  sleep 25
+done
+[ -n "$ok" ] || fail "Browser nicht über Rumänien"
 
 echo "== Handy im selben WLAN (benutzt den Mac als Proxy)"
 LAN="$(PYTHONPATH="$REPO" python3 -c 'from neuvpn import tor; print(tor.lan_addresses()[0])')"
 echo "   Mac-IP im Netz: $LAN"
-c="$(country_via "http://$LAN:9056")"
+# the helper re-checks the exit every 20 s and replaces exits that websites locate elsewhere
+for attempt in 1 2 3 4; do
+  c="$(country_via "http://$LAN:9056")"
+  [ "$c" = RO ] && break
+  echo "   Versuch $attempt: Ausgang wird als '$c' erkannt – Korrektur abwarten (25 s)"
+  sleep 25
+done
 [ "$c" = RO ] || fail "HTTPS über Proxy $LAN:9056 (iPhone-Einstellung) kommt aus '$c'"
 pass "iPhone-Weg: HTTPS-Seiten über $LAN:9056 kommen aus Rumänien"
 c="$(country_via "socks5h://$LAN:9055")"

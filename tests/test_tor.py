@@ -103,6 +103,38 @@ class ExitCheckTest(unittest.TestCase):
         self.assertEqual(result[1], "RO")
         self.assertEqual(tor.excluded_exits(self.paths), ["9.9.9.9"])
 
+    def test_exit_country_from_torrc(self):
+        self.assertEqual(tor._exit_country(tor.build_torrc(self.paths, "ro")), "RO")
+        self.assertIsNone(tor._exit_country("SocksPort 9050"))
+
+    def test_watch_keeps_checking_until_stopped(self):
+        stop = threading.Event()
+        calls = []
+
+        def fake_ensure(*args):
+            calls.append(args)
+            if len(calls) == 3:
+                stop.set()
+            if len(calls) == 2:
+                raise OSError("Netz weg")  # must not end the watch
+
+        with mock.patch.object(tor, "ensure_exit_country", side_effect=fake_ensure):
+            tor.watch_exit_country(self.paths, "RO", 9055, 9057, interval=0.01, stop_event=stop)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[0], (self.paths, "RO", 9055, 9057))
+
+    def test_proxy_process_starts_the_watch(self):
+        from neuvpn import httpproxy
+
+        started = threading.Event()
+        with mock.patch.object(httpproxy, "ProxyServer") as server, \
+                mock.patch.object(tor, "watch_exit_country",
+                                  side_effect=lambda *a: started.set()) as watch:
+            httpproxy.main(["127.0.0.1", "9056", "9055", "--watch", "RO", "/tmp/x", "9057"])
+            self.assertTrue(started.wait(5))
+        server.return_value.serve_forever.assert_called_once()
+        self.assertEqual(watch.call_args.args, (tor.TorPaths(Path("/tmp/x")), "RO", 9055, 9057))
+
     def test_lookup_failures_are_retried(self):
         with mock.patch.object(geo, "lookup", side_effect=OSError("down")):
             self.assertEqual(tor.ensure_exit_country(self.paths, "RO", attempts=2, wait=0),

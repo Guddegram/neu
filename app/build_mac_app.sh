@@ -73,7 +73,8 @@ cp -R "$BUNDLE/tor" "$BUNDLE/data" "$APP/Contents/Resources/tor-bundle/"
 PLIST="$APP/Contents/Info.plist"
 APP_VERSION="$(grep -oE '[0-9]+\.[0-9]+\.[0-9]+' "$REPO/neuvpn/__init__.py")"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_TITLE" "$PLIST"
-/usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_TITLE" "$PLIST"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_TITLE" "$PLIST" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $APP_TITLE" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $APP_VERSION" "$PLIST"
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string 11.0" "$PLIST" 2>/dev/null || true
 lipo -archs "$APP/Contents/MacOS/$EXE"

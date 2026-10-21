@@ -130,6 +130,15 @@ class ProxyServer(socketserver.ThreadingTCPServer):
 def main(argv: list[str]) -> None:
     host, port, socks_port = argv[0], int(argv[1]), int(argv[2])
     server = ProxyServer((host, port), ("127.0.0.1", socks_port), "--lan-only" in argv)
+    if "--watch" in argv:  # --watch COUNTRY TOR_DIR CONTROL_PORT
+        from pathlib import Path
+
+        from . import tor
+
+        i = argv.index("--watch")
+        country, base, control = argv[i + 1], Path(argv[i + 2]), int(argv[i + 3])
+        threading.Thread(target=tor.watch_exit_country, daemon=True,
+                         args=(tor.TorPaths(base), country, socks_port, control)).start()
     server.serve_forever()
 
 
