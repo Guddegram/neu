@@ -52,6 +52,8 @@ jobs:
       - run: python3 -m neuvpn tor status
       - run: python3 -m neuvpn check --socks 127.0.0.1:9055 --expect RO
       - run: python3 -m neuvpn tor new-ip
+      - name: Falsch zugeordneten Ausgang sperren (live)
+        run: python3 tests/e2e/exclude_exit_live.py
       - if: always()
         run: python3 -m neuvpn tor stop
 

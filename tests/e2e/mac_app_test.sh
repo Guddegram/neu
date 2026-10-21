@@ -55,7 +55,8 @@ for attempt in 1 2 3 4; do
   echo "   Versuch $attempt: noch nicht RO – App korrigiert den Ausgang, warte 35 s"
   sleep 35
 done
-echo "   Von der App gesperrte Ausgänge: $(tr '\n' ' ' < "$HOME/.neuvpn/tor/excluded-exits.txt" 2>/dev/null || echo keine)"
+excluded="$HOME/.neuvpn/tor/excluded-exits.txt"
+echo "   Von der App gesperrte Ausgänge: $([ -s "$excluded" ] && tr '\n' ' ' < "$excluded" || echo keine)"
 [ -n "$ok" ] || fail "Browser nicht über Rumänien"
 
 echo "== Handy über den Mac (Proxy-Prozess der App)"
