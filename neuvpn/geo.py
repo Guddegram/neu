@@ -8,10 +8,12 @@ import struct
 import urllib.parse
 import urllib.request
 
+# ifconfig.co first: it uses the MaxMind database that many websites use for their
+# country checks; ipinfo.io often answers Tor exits with 403.
 GEO_SERVICES = [
-    "https://ipinfo.io/json",
     "https://ifconfig.co/json",
     "http://ip-api.com/json",
+    "https://ipinfo.io/json",
 ]
 
 

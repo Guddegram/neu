@@ -13,11 +13,12 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from . import geo, httpproxy, tor
+from . import httpproxy, tor
 from .config import default_data_dir
 
 COUNTRY = "RO"
 SOCKS, HTTP, CONTROL = tor.DEFAULT_SOCKS_PORT, tor.DEFAULT_HTTP_PORT, tor.DEFAULT_CONTROL_PORT
+WATCH_INTERVAL_MS = int(os.environ.get("NEUVPN_GUI_WATCH_MS", "30000"))
 COLORS = {"off": "#8e8e93", "connecting": "#ff9f0a", "on": "#30d158", "error": "#ff453a"}
 
 
@@ -30,6 +31,7 @@ class App:
         self.info: dict = {}
         self.busy = False
         self.cancelled = False
+        self.watching = False
         self.sharing = False  # copy of the checkbox, safe to read from worker threads
         self.status_file = os.environ.get("NEUVPN_GUI_STATUS")
 
@@ -60,6 +62,7 @@ class App:
         signal.signal(signal.SIGTERM, lambda *_: self.events.put(("quit", None)))
         self.render()
         self.poll_job = root.after(100, self.poll)
+        self.watch_job = root.after(WATCH_INTERVAL_MS, self.watch)
 
         if tor.recover_system_proxy(self.paths):
             self.info = {"note": "Proxy-Einstellungen vom letzten Mal wurden zurückgesetzt."}
@@ -199,12 +202,28 @@ class App:
         if tor.torrc_ports(self._torrc()).get("socks", ("",))[0] == "0.0.0.0":
             lan = tor.lan_addresses()
             info["lan"] = lan[0] if lan else "?"
-        try:
-            ip, country, city = geo.lookup(socks=("127.0.0.1", SOCKS), timeout=30)
+        # check like a website does; exits located elsewhere are excluded automatically
+        ip, country, city = tor.ensure_exit_country(self.paths, COUNTRY, SOCKS, CONTROL)
+        if ip:
             info.update(ip=ip, country=country, city=city)
-        except OSError:
+        else:
             info.update(note="Standort konnte gerade nicht geprüft werden.")
-        self.post("on", info)
+        if tor.running_pid(self.paths):
+            self.post("on", info)
+
+    def watch(self) -> None:
+        """While on: re-check the exit regularly (Tor switches circuits every few minutes)."""
+        if self.state == "on" and not self.busy and not self.watching:
+            self.watching = True
+
+            def worker():
+                try:
+                    self._check_worker()
+                finally:
+                    self.watching = False
+
+            threading.Thread(target=worker, daemon=True).start()
+        self.watch_job = self.root.after(WATCH_INTERVAL_MS, self.watch)
 
     def _torrc(self) -> str:
         try:
@@ -228,6 +247,7 @@ class App:
             self._switch_off()
         self.write_status("closed")
         self.root.after_cancel(self.poll_job)
+        self.root.after_cancel(self.watch_job)
         self.root.destroy()
 
 

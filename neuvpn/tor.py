@@ -62,6 +62,11 @@ class TorPaths:
         return self.base / "http-proxy.log"
 
     @property
+    def excluded(self) -> Path:
+        """Exit IPs that websites do not locate in the chosen country (see ensure_exit_country)."""
+        return self.base / "excluded-exits.txt"
+
+    @property
     def proxy_state(self) -> Path:
         return self.base / "system-proxy-services"
 
@@ -94,6 +99,9 @@ def build_torrc(
         # new circuit every 10 minutes at most, keeps the IP stable while browsing
         "MaxCircuitDirtiness 600",
     ]
+    excluded = excluded_exits(paths)
+    if excluded:
+        lines.append(f"ExcludeExitNodes {','.join(excluded)}")
     bundle = bundled_tor_dir()
     if bundle and (bundle / "data" / "geoip").exists():
         # the bundled tor has no compiled-in GeoIP path; needed for ExitNodes {ro}
@@ -330,14 +338,69 @@ def _stop_pidfile(pidfile: Path) -> bool:
     return True
 
 
+def _control(paths: TorPaths, control_port: int, commands: list[str]) -> str:
+    cookie = (paths.data / "control_auth_cookie").read_bytes().hex()
+    lines = [f"AUTHENTICATE {cookie}", *commands, "QUIT"]
+    reply = b""
+    with socket.create_connection(("127.0.0.1", control_port), timeout=10) as s:
+        s.sendall(("\r\n".join(lines) + "\r\n").encode())
+        while chunk := s.recv(4096):
+            reply += chunk
+    text = reply.decode(errors="replace")
+    if text.count("250 ") < len(lines):
+        raise TorError(f"Tor hat die Anfrage abgelehnt: {text.strip()}")
+    return text
+
+
 def new_identity(paths: TorPaths, control_port: int = DEFAULT_CONTROL_PORT) -> None:
     """Ask Tor for fresh circuits (a new Romanian exit IP)."""
-    cookie = (paths.data / "control_auth_cookie").read_bytes().hex()
-    with socket.create_connection(("127.0.0.1", control_port), timeout=10) as s:
-        s.sendall(f"AUTHENTICATE {cookie}\r\nSIGNAL NEWNYM\r\nQUIT\r\n".encode())
-        reply = s.recv(4096).decode(errors="replace")
-    if reply.count("250") < 2:
-        raise TorError(f"Tor hat die Anfrage abgelehnt: {reply.strip()}")
+    _control(paths, control_port, ["SIGNAL NEWNYM"])
+
+
+def excluded_exits(paths: TorPaths) -> list[str]:
+    try:
+        return [l.strip() for l in paths.excluded.read_text().splitlines() if l.strip()]
+    except FileNotFoundError:
+        return []
+
+
+def exclude_exit(paths: TorPaths, ip: str, control_port: int = DEFAULT_CONTROL_PORT) -> None:
+    """Never use this exit IP again (now and in future runs) and switch to a new circuit."""
+    ipaddress.ip_address(ip)  # only plain IPs end up in the torrc
+    excluded = excluded_exits(paths)
+    if ip not in excluded:
+        excluded.append(ip)
+        paths.excluded.write_text("\n".join(excluded) + "\n", encoding="utf-8")
+    _control(paths, control_port, [f'SETCONF ExcludeExitNodes="{",".join(excluded)}"',
+                                   "SIGNAL NEWNYM"])
+
+
+def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT_SOCKS_PORT,
+                        control_port: int = DEFAULT_CONTROL_PORT, attempts: int = 6,
+                        wait: float = 3.0):
+    """Check the exit like a website does; exclude exits located elsewhere and try again.
+
+    Tor's own GeoIP data and the databases websites use (e.g. MaxMind) sometimes
+    disagree about single exit relays. Returns (ip, country, city) of the last check.
+    """
+    from . import geo
+
+    result = (None, None, None)
+    for _ in range(attempts):
+        try:
+            result = geo.lookup(socks=("127.0.0.1", socks_port), timeout=30)
+        except OSError:
+            time.sleep(wait)
+            continue
+        ip, found, _ = result
+        if found == country.upper() or not ip or not found:
+            return result
+        try:
+            exclude_exit(paths, ip, control_port)
+        except (TorError, OSError, ValueError):
+            pass
+        time.sleep(wait)
+    return result
 
 
 def lan_addresses() -> list[str]:

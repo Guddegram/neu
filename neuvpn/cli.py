@@ -349,13 +349,14 @@ def cmd_tor_start(args) -> int:
                   on_restart=lambda p: print(f"  Hängt bei {p}% – neuer Versuch …", flush=True))
     except tor.TorError as exc:
         raise NeuVPNError(str(exc)) from None
-    try:
-        ip, got, city = geo.lookup(socks=("127.0.0.1", socks_port), timeout=30)
+    # check like a website does; exits located elsewhere are excluded automatically
+    ip, got, city = tor.ensure_exit_country(paths, country, socks_port, control_port)
+    if ip:
         where = f"{_country(got) if got else 'unbekannt'}" + (f", {city}" if city else "")
         print(f"✔ Verbunden – öffentliche IP {ip} ({where})")
         if got and got != country:
             print(f"! Achtung: Ausgang ist nicht in {_country(country)}.")
-    except OSError:
+    else:
         print("✔ Verbunden (Standort konnte nicht geprüft werden).")
     if tor.is_mac() and args.system_proxy:
         changed = tor.set_mac_system_proxy(paths, socks_port, http_port, enable=True)

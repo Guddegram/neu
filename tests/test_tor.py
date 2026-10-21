@@ -75,6 +75,40 @@ class TorrcTest(unittest.TestCase):
         self.assertEqual(tor.bootstrap_percent(""), 0)
 
 
+class ExitCheckTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.paths = tor.TorPaths(Path(self.tmp.name))
+
+    def test_excluded_exits_end_up_in_torrc(self):
+        self.assertNotIn("ExcludeExitNodes", tor.build_torrc(self.paths, "RO"))
+        self.paths.excluded.write_text("140.233.190.47\n\n1.2.3.4\n")
+        self.assertIn("ExcludeExitNodes 140.233.190.47,1.2.3.4", tor.build_torrc(self.paths, "RO"))
+
+    def test_exit_located_elsewhere_is_excluded(self):
+        answers = iter([("140.233.190.47", "US", None), ("185.100.87.192", "RO", "Bucharest")])
+        sent = []
+        with mock.patch.object(geo, "lookup", side_effect=lambda **kw: next(answers)), \
+                mock.patch.object(tor, "_control", side_effect=lambda p, port, cmds: sent.append(cmds)):
+            result = tor.ensure_exit_country(self.paths, "RO", wait=0)
+        self.assertEqual(result, ("185.100.87.192", "RO", "Bucharest"))
+        self.assertEqual(tor.excluded_exits(self.paths), ["140.233.190.47"])
+        self.assertEqual(sent, [['SETCONF ExcludeExitNodes="140.233.190.47"', "SIGNAL NEWNYM"]])
+
+    def test_exclusion_survives_without_control_port_and_ignores_garbage(self):
+        answers = iter([("9.9.9.9", "US", None), ("not-an-ip", "DE", None), ("5.5.5.5", "RO", None)])
+        with mock.patch.object(geo, "lookup", side_effect=lambda **kw: next(answers)):
+            result = tor.ensure_exit_country(self.paths, "RO", wait=0)  # no tor running
+        self.assertEqual(result[1], "RO")
+        self.assertEqual(tor.excluded_exits(self.paths), ["9.9.9.9"])
+
+    def test_lookup_failures_are_retried(self):
+        with mock.patch.object(geo, "lookup", side_effect=OSError("down")):
+            self.assertEqual(tor.ensure_exit_country(self.paths, "RO", attempts=2, wait=0),
+                             (None, None, None))
+
+
 class TorProcessTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

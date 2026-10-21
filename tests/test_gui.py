@@ -92,6 +92,18 @@ class GuiTest(unittest.TestCase):
         self.assertIsNone(tor.running_pid(app.paths))
         self.assertEqual(app.button.cget("text"), "Einschalten")
 
+    def test_exit_in_wrong_country_is_replaced(self):
+        self.fake_tor()
+        answers = iter([("140.233.190.47", "US", None)] + [("185.100.87.192", "RO", "Bucharest")] * 10)
+        self.lookup.side_effect = lambda **kw: next(answers)
+        app = self.gui.App(self.root)
+        app.toggle()
+        self.wait_for(app, "on")
+        self.assertEqual(app.info["ip"], "185.100.87.192")
+        self.assertEqual(tor.excluded_exits(app.paths), ["140.233.190.47"])
+        app.toggle()
+        self.wait_for(app, "off")
+
     def test_cancel_while_connecting(self):
         self.fake_tor("hang")
         app = self.gui.App(self.root)

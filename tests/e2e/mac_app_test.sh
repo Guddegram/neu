@@ -47,7 +47,16 @@ python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(d.get("cou
 pass "App: An – Rumänien"
 proxy_on || fail "macOS-Proxy nicht aktiv"
 pass "macOS-Proxy aktiv"
-/tmp/selenium-venv/bin/python "$REPO/tests/e2e/mac_browsers.py" RO || fail "Browser nicht über Rumänien"
+# Tor's GeoIP and the databases websites use can disagree about single exits; the app
+# re-checks every 30 s and replaces such exits, so give it up to two minutes.
+ok=""
+for attempt in 1 2 3 4; do
+  if /tmp/selenium-venv/bin/python "$REPO/tests/e2e/mac_browsers.py" RO; then ok=1; break; fi
+  echo "   Versuch $attempt: noch nicht RO – App korrigiert den Ausgang, warte 35 s"
+  sleep 35
+done
+echo "   Von der App gesperrte Ausgänge: $(tr '\n' ' ' < "$HOME/.neuvpn/tor/excluded-exits.txt" 2>/dev/null || echo keine)"
+[ -n "$ok" ] || fail "Browser nicht über Rumänien"
 
 echo "== Handy über den Mac (Proxy-Prozess der App)"
 LAN="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["lan"])' "$STATUS")"
