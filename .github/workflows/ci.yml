@@ -50,15 +50,7 @@ jobs:
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq tor tor-geoipdb
       - run: python3 -m neuvpn tor start --timeout 300
       - run: python3 -m neuvpn tor status
-      # bis zu 3 Versuche: die Überwachung sperrt Exits, die Google woanders
-      # verortet, und wechselt den Kreis - der Einzel-Check darf nicht genau
-      # in so einen Wechsel fallen
-      - run: |
-          for i in 1 2 3; do
-            python3 -m neuvpn check --socks 127.0.0.1:9055 --expect RO && exit 0
-            sleep 25
-          done
-          exit 1
+      - run: python3 -m neuvpn check --socks 127.0.0.1:9055 --expect RO
       - run: python3 -m neuvpn tor new-ip
       - name: Falsch zugeordneten Ausgang sperren (live)
         run: python3 tests/e2e/exclude_exit_live.py
