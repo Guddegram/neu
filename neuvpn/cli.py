@@ -239,12 +239,18 @@ def cmd_check(args) -> int:
         except NeuVPNError:
             expect = "RO"
     socks = _parse_hostport(args.socks) if args.socks else None
-    ip, country, city = geo.lookup(urls=args.url or None, socks=socks)
-    where = _country(country) if country else "unbekannt"
-    print(f"Öffentliche IP: {ip}\nStandort:       {where}" + (f", {city}" if city else ""))
-    if country == expect.upper():
-        print(f"✔ Dein Datenverkehr kommt aus {_country(expect.upper())}.")
-        return 0
+    # bis zu 3 Versuche: die Überwachung tauscht falsch verortete Ausgänge aus,
+    # ein Einzel-Check darf nicht genau in so einen Wechsel fallen
+    for attempt in range(3):
+        if attempt:
+            time.sleep(20)
+        ip, country, city = geo.lookup(urls=args.url or None, socks=socks)
+        where = _country(country) if country else "unbekannt"
+        print(f"Öffentliche IP: {ip}\nStandort:       {where}" + (f", {city}" if city else ""))
+        if country == expect.upper():
+            print(f"✔ Dein Datenverkehr kommt aus {_country(expect.upper())}.")
+            return 0
+        print("… Ausgang wird vermutlich gerade gewechselt, prüfe gleich nochmal …")
     print(f"✘ Erwartet war {_country(expect.upper())} – VPN aktiv?")
     return 1
 

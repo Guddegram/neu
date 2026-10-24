@@ -89,7 +89,8 @@ class CliTest(unittest.TestCase):
             code, out, _ = run("check")
         self.assertEqual(code, 0)
         self.assertIn("Rumänien", out)
-        with mock.patch.object(geo, "lookup", return_value=("8.8.8.8", "DE", None)):
+        with mock.patch.object(geo, "lookup", return_value=("8.8.8.8", "DE", None)), \
+                mock.patch("time.sleep"):  # check wiederholt 3x, ohne echte Wartezeit
             self.assertEqual(run("check")[0], 1)
 
     def test_geo_parsing(self):
