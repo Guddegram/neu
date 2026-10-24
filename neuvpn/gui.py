@@ -250,7 +250,10 @@ class App:
             return
         # confirm the country (geo services + Google) BEFORE touching the system proxy
         self.post("connecting", {"percent": 100, "message": f"Prüfe Standort ({name}) …"})
-        ip, found, _city = tor.ensure_exit_country(self.paths, country, SOCKS, CONTROL)
+        # many attempts, hard time budget: bad exits (e.g. Google says Island) are
+        # excluded permanently, so later connects get faster and faster
+        ip, found, _city = tor.ensure_exit_country(self.paths, country, SOCKS, CONTROL,
+                                                   attempts=99, deadline=240)
         if found != country or not ip:
             tor.stop(self.paths)
             if self.cancelled:

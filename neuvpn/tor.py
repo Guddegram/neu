@@ -411,7 +411,7 @@ def exclude_exit(paths: TorPaths, ip: str, control_port: int = DEFAULT_CONTROL_P
 
 def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT_SOCKS_PORT,
                         control_port: int = DEFAULT_CONTROL_PORT, attempts: int = 6,
-                        wait: float = 3.0):
+                        wait: float = 3.0, deadline: float | None = None):
     """Check the exit like websites do; exclude exits located elsewhere and try again.
 
     All reachable geo services must agree on the country (they use different
@@ -423,7 +423,10 @@ def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT
 
     result = (None, None, None)
     target = country.upper()
+    started = time.monotonic()
     for _ in range(attempts):
+        if deadline is not None and time.monotonic() - started > deadline:
+            break
         try:
             ip, countries, city = geo.lookup_consensus(socks=("127.0.0.1", socks_port),
                                                        timeout=30)

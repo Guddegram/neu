@@ -25,5 +25,7 @@ for _ in range(10):
 print(f"Ausgang nachher: {ip2} ({country2})")
 assert ip2 != ip1, "Tor benutzt den gesperrten Ausgang weiter"
 assert ip1 in tor.excluded_exits(paths)
-assert f"ExcludeExitNodes {ip1}" in tor.build_torrc(paths, "RO")
+# the watch may have excluded other exits first (e.g. Google locates them
+# elsewhere), so ip1 only has to be somewhere in the torrc exclusion list
+assert ip1 in tor.build_torrc(paths, "RO")
 print("✔ Gesperrter Ausgang wird nicht mehr benutzt und bleibt für den nächsten Start gesperrt")

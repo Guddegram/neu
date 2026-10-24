@@ -155,9 +155,10 @@ class GuiTest(unittest.TestCase):
 
         self.fake_tor()
         self.exit_count.return_value = 6  # Türkei: exits exist but are dead/slow
-        self.lookup.side_effect = OSError("timed out")  # nothing reachable via tor
         found = (("46.197.136.14", 8080), "46.197.136.14", "Erzurum")
         with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "TR"}), \
+                mock.patch.object(tor, "ensure_exit_country",  # nothing confirmable via tor
+                                  return_value=(None, None, None)), \
                 mock.patch.object(freeproxy, "find_proxy", return_value=found), \
                 mock.patch.object(tor, "is_mac", return_value=False):
             app = self.make_app()
