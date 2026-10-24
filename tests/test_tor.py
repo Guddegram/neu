@@ -273,11 +273,19 @@ class MacProxyTest(unittest.TestCase):
             self.assertEqual(
                 calls,
                 [["networksetup", "-setsocksfirewallproxystate", "Wi-Fi", "off"],
+                 ["networksetup", "-setwebproxystate", "Wi-Fi", "off"],
                  ["networksetup", "-setsecurewebproxystate", "Wi-Fi", "off"],
                  ["networksetup", "-setsocksfirewallproxystate", "USB LAN", "off"],
+                 ["networksetup", "-setwebproxystate", "USB LAN", "off"],
                  ["networksetup", "-setsecurewebproxystate", "USB LAN", "off"]],
             )
             self.assertFalse(paths.proxy_state.exists())
+
+    def test_http_only_mode_for_free_proxies(self):
+        cmds = tor.mac_proxy_commands("Wi-Fi", 9055, 9056, enable=True, http_only=True)
+        self.assertIn(["-setwebproxy", "Wi-Fi", "127.0.0.1", "9056"], cmds)
+        self.assertIn(["-setsecurewebproxy", "Wi-Fi", "127.0.0.1", "9056"], cmds)
+        self.assertNotIn(["-setsocksfirewallproxy", "Wi-Fi", "127.0.0.1", "9055"], cmds)
 
     def test_failed_commands_ask_for_password_once(self):
         calls = []

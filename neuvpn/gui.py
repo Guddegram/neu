@@ -13,7 +13,7 @@ import threading
 import tkinter as tk
 from tkinter import ttk
 
-from . import httpproxy, tor
+from . import freeproxy, httpproxy, tor
 from .config import default_data_dir
 
 COUNTRY = "RO"  # default selection
@@ -43,6 +43,10 @@ class App:
         self.cancelled = False
         self.watching = False
         self.sharing = False  # copy of the checkbox, safe to read from worker threads
+        self.mode = "tor"  # "tor" or "proxy" (free proxy for countries without Tor exits)
+        self.proxy: tuple[str, int] | None = None
+        self.bad_proxies: set[tuple[str, int]] = set()
+        self.local_proxy: httpproxy.ProxyServer | None = None
         self.active_country = os.environ.get("NEUVPN_GUI_COUNTRY", COUNTRY).upper()
         if self.active_country not in COUNTRIES:
             self.active_country = COUNTRY
@@ -202,6 +206,12 @@ class App:
 
     def new_ip(self) -> None:
         def worker():
+            if self.mode == "proxy":
+                if self.proxy:  # force a different free proxy
+                    self.bad_proxies.add(self.proxy)
+                    self.proxy = None
+                self._proxy_check()
+                return
             try:
                 tor.new_identity(self.paths, CONTROL)
             except (tor.TorError, OSError):
@@ -211,14 +221,13 @@ class App:
 
     def _start_worker(self) -> None:
         self.cancelled = False
+        self.mode = "tor"
         country = self.active_country
         name = COUNTRIES[country][1]
         self.post("connecting", {"percent": 0, "message": f"Prüfe Server in {name} …"})
-        exits = tor.exit_count(country)  # honest check: None = unknown, 0 = impossible
+        exits = tor.exit_count(country)  # honest check: None = unknown, 0 = no Tor exits
         if exits == 0:
-            self.post("error", {"message": (
-                f"In {name} gibt es im Tor-Netz gerade keine Ausgangs-Server – eine "
-                f"{name}-IP ist deshalb aktuell nicht möglich. Bitte anderes Land wählen.")})
+            self._proxy_start(country, name)  # fall back to verified free proxies
             return
         self.post("connecting", {"percent": 0})
         try:
@@ -242,7 +251,88 @@ class App:
             return
         self._check_worker()
 
+    # ---- free-proxy mode (countries without Tor exits) ------------------
+
+    PROXY_NOTE = "Über freien Proxy-Server – für Logins & Banking vorher ausschalten."
+
+    def _proxy_on_info(self, ip: str, city: str | None) -> dict:
+        note = self.PROXY_NOTE
+        if self.sharing:
+            note += "\nHandy-Mitnutzung gibt es im Proxy-Modus noch nicht."
+        return {"ip": ip, "country": self.active_country, "city": city, "note": note}
+
+    def _proxy_start(self, country: str, name: str) -> None:
+        self.mode = "proxy"
+        self.post("connecting", {"message": (
+            f"Keine Tor-Server in {name} – suche einen freien Proxy-Server dort "
+            "(kann 1–2 Minuten dauern) …")})
+        found = freeproxy.find_proxy(
+            country, exclude=self.bad_proxies,
+            progress=lambda n, total: self.post("connecting", {
+                "message": f"Teste freie Server in {name} … ({n}/{total})"}),
+            should_cancel=lambda: self.cancelled)
+        if self.cancelled:
+            self.post("off")
+            return
+        if not found:
+            self.post("error", {"message": (
+                f"Gerade ist kein funktionierender kostenloser Server in {name} zu finden. "
+                "Freie Server kommen und gehen – in ein paar Minuten nochmal versuchen.")})
+            return
+        self.proxy, ip, city = found
+        try:
+            if self.local_proxy is None:
+                self.local_proxy = httpproxy.ProxyServer(("127.0.0.1", HTTP),
+                                                         upstream_http=self.proxy)
+                threading.Thread(target=self.local_proxy.serve_forever, daemon=True).start()
+            else:
+                self.local_proxy.upstream_http = self.proxy
+        except OSError as exc:
+            self.post("error", {"message": f"Lokaler Proxy-Port belegt: {exc}"[:300]})
+            return
+        if tor.is_mac() and not tor.set_mac_system_proxy(self.paths, SOCKS, HTTP,
+                                                         enable=True, http_only=True):
+            self._close_local_proxy()
+            self.post("error", {"message": "Mac-Proxy konnte nicht eingeschaltet werden "
+                                           "(Passwort abgebrochen?)."})
+            return
+        self.post("on", self._proxy_on_info(ip, city))
+
+    def _proxy_check(self) -> None:
+        """Re-verify the current proxy; replace it silently if it died or moved."""
+        name = COUNTRIES[self.active_country][1]
+        result = (freeproxy.verify(self.proxy, self.active_country, timeout=30)
+                  if self.proxy else None)  # free proxies are slow; don't churn
+        if result:
+            self.post("on", self._proxy_on_info(*result))
+            return
+        if self.proxy:
+            self.bad_proxies.add(self.proxy)
+            self.proxy = None
+        found = freeproxy.find_proxy(self.active_country, exclude=self.bad_proxies,
+                                     should_cancel=lambda: self.cancelled)
+        if found and self.local_proxy is not None:
+            self.proxy, ip, city = found
+            self.local_proxy.upstream_http = self.proxy  # no new password needed
+            self.post("on", self._proxy_on_info(ip, city))
+            return
+        self._switch_off()
+        self.post("error", {"message": (
+            f"Der freie Server in {name} ist weggefallen und gerade ist kein neuer zu "
+            "finden. Später nochmal versuchen.")})
+
+    def _close_local_proxy(self) -> None:
+        if self.local_proxy is not None:
+            self.local_proxy.shutdown()
+            self.local_proxy.server_close()
+            self.local_proxy = None
+
+    # ---- shared check ---------------------------------------------------
+
     def _check_worker(self) -> None:
+        if self.mode == "proxy":
+            self._proxy_check()
+            return
         info: dict = {}
         if tor.torrc_ports(self._torrc()).get("socks", ("",))[0] == "0.0.0.0":
             lan = tor.lan_addresses()
@@ -285,6 +375,8 @@ class App:
         if tor.is_mac() and self.paths.proxy_state.exists():
             tor.set_mac_system_proxy(self.paths, SOCKS, HTTP, enable=False)
         tor.stop(self.paths)
+        self._close_local_proxy()
+        self.proxy = None
 
     def quit(self) -> None:
         if self.state != "off" or tor.running_pid(self.paths):

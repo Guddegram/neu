@@ -78,6 +78,15 @@ class _Handler(socketserver.BaseRequestHandler):
         client.settimeout(120)
         try:
             head, rest = _read_head(client)
+            upstream_http = self.server.upstream_http
+            if upstream_http:
+                # free-proxy mode: relay the proxy request 1:1 to the remote
+                # HTTP proxy (it answers CONNECT itself); swapping the remote
+                # proxy only changes this attribute, no new macOS password
+                upstream = socket.create_connection(tuple(upstream_http), 60)
+                upstream.sendall(head + b"\r\n\r\n" + rest)
+                self._pipe_both(client, upstream)
+                return
             first = head.split(b"\r\n", 1)[0].decode("iso-8859-1")
             method, target, _ = first.split(" ", 2)
             if method.upper() == "CONNECT":
@@ -99,6 +108,9 @@ class _Handler(socketserver.BaseRequestHandler):
             except OSError:
                 pass
             return
+        self._pipe_both(client, upstream)
+
+    def _pipe_both(self, client: socket.socket, upstream: socket.socket) -> None:
         upstream.settimeout(None)
         client.settimeout(None)
         t = threading.Thread(target=_pipe, args=(upstream, client), daemon=True)
@@ -112,9 +124,11 @@ class ProxyServer(socketserver.ThreadingTCPServer):
     daemon_threads = True
     allow_reuse_address = True
 
-    def __init__(self, listen: tuple[str, int], socks: tuple[str, int], lan_only: bool):
+    def __init__(self, listen: tuple[str, int], socks: tuple[str, int] | None = None,
+                 lan_only: bool = False, upstream_http: tuple[str, int] | None = None):
         self.socks = socks
         self.lan_only = lan_only
+        self.upstream_http = upstream_http  # free-proxy mode: relay instead of SOCKS
         super().__init__(listen, _Handler)
 
     def verify_request(self, request, client_address) -> bool:

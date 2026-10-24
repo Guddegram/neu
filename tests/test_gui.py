@@ -109,6 +109,50 @@ class GuiTest(unittest.TestCase):
         app.toggle()
         self.wait_for(app, "off")
 
+    def test_free_proxy_mode_for_countries_without_tor_exits(self):
+        from neuvpn import freeproxy
+
+        self.exit_count.return_value = 0  # e.g. Ecuador: no Tor exits at all
+        found = (("45.4.202.147", 999), "193.30.14.7", "Quito")
+        with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "EC"}), \
+                mock.patch.object(freeproxy, "find_proxy", return_value=found) as find, \
+                mock.patch.object(tor, "is_mac", return_value=False):
+            app = self.gui.App(self.root)
+            self.assertEqual(app.active_country, "EC")
+            app.toggle()
+            self.wait_for(app, "on")
+            self.assertEqual(app.mode, "proxy")
+            self.assertEqual(app.title.cget("text"), "An – Ecuador")
+            self.assertIn("193.30.14.7", app.detail.cget("text"))
+            self.assertIn("freien Proxy", app.detail.cget("text"))
+            self.assertEqual(find.call_args.args[0], "EC")
+            self.assertIsNone(tor.running_pid(app.paths))  # no tor needed
+            self.assertEqual(app.local_proxy.upstream_http, ("45.4.202.147", 999))
+
+            # "Neue IP": the current proxy is banned and a different one is used
+            find.return_value = (("200.5.120.198", 8080), "200.5.120.1", None)
+            app.new_ip()
+            self.wait_for(app, "on")
+            self.assertIn(("45.4.202.147", 999), app.bad_proxies)
+            self.assertEqual(app.local_proxy.upstream_http, ("200.5.120.198", 8080))
+
+            app.toggle()
+            self.wait_for(app, "off")
+            self.assertIsNone(app.local_proxy)
+
+    def test_free_proxy_mode_honest_error_when_none_works(self):
+        from neuvpn import freeproxy
+
+        self.exit_count.return_value = 0
+        with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "AR"}), \
+                mock.patch.object(freeproxy, "find_proxy", return_value=None), \
+                mock.patch.object(tor, "is_mac", return_value=False):
+            app = self.gui.App(self.root)
+            app.toggle()
+            self.wait_for(app, "error")
+            self.assertIn("kein funktionierender kostenloser Server in Argentinien",
+                          app.detail.cget("text"))
+
     def test_cancel_while_connecting(self):
         self.fake_tor("hang")
         app = self.gui.App(self.root)

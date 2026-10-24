@@ -39,8 +39,10 @@ Danach startet die App wie jedes andere Programm (Programme-Ordner, Launchpad, S
   Beim ersten Einschalten fragt macOS nach deinem Passwort (für die Proxy-Einstellung des Macs).
   Die App prüft die IP bei **mehreren** Geo-Diensten und wechselt den Server automatisch, bis
   **alle** dasselbe Land melden – IP-Adresse und angezeigter Standort sind damit immer identisch.
-  Hat ein Land gerade keine Tor-Ausgangs-Server (passiert bei Argentinien/Ecuador oft), sagt die
-  App das ehrlich, statt ewig zu verbinden.
+  Hat ein Land gerade keine Tor-Ausgangs-Server (bei Argentinien/Ecuador normal), sucht die App
+  automatisch einen **freien Proxy-Server** in dem Land und prüft ihn genauso streng. Freie Proxys
+  werden von Unbekannten betrieben und sind langsamer – nichts Sensibles (Banking, Logins) darüber
+  machen. Ist gerade keiner online, sagt die App das ehrlich, statt ewig zu verbinden.
 - **Neue IP (Land)**: wechselt die IP, bleibt im gewählten Land.
 - **Handy im selben WLAN mitnutzen**: vor dem Einschalten anhaken – die App zeigt dann Server und
   Port, die du am Handy einträgst (siehe unten, Handy Variante 2).

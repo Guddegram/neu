@@ -519,7 +519,16 @@ def mac_network_services() -> list[str]:
     return services
 
 
-def mac_proxy_commands(service: str, socks_port: int, http_port: int, enable: bool) -> list[list[str]]:
+def mac_proxy_commands(service: str, socks_port: int, http_port: int, enable: bool,
+                       http_only: bool = False) -> list[list[str]]:
+    if enable and http_only:
+        # free-proxy mode: everything through the local HTTP forwarder (no SOCKS)
+        return [
+            ["-setwebproxy", service, "127.0.0.1", str(http_port)],
+            ["-setwebproxystate", service, "on"],
+            ["-setsecurewebproxy", service, "127.0.0.1", str(http_port)],
+            ["-setsecurewebproxystate", service, "on"],
+        ]
     if enable:
         return [
             ["-setsocksfirewallproxy", service, "127.0.0.1", str(socks_port)],
@@ -527,13 +536,15 @@ def mac_proxy_commands(service: str, socks_port: int, http_port: int, enable: bo
             ["-setsecurewebproxy", service, "127.0.0.1", str(http_port)],
             ["-setsecurewebproxystate", service, "on"],
         ]
-    return [
+    return [  # disable always clears both modes (tor and free-proxy)
         ["-setsocksfirewallproxystate", service, "off"],
+        ["-setwebproxystate", service, "off"],
         ["-setsecurewebproxystate", service, "off"],
     ]
 
 
-def set_mac_system_proxy(paths: TorPaths, socks_port: int, http_port: int, enable: bool) -> list[str]:
+def set_mac_system_proxy(paths: TorPaths, socks_port: int, http_port: int, enable: bool,
+                         http_only: bool = False) -> list[str]:
     if enable:
         services = mac_network_services()
         paths.proxy_state.write_text("\n".join(services), encoding="utf-8")
@@ -543,7 +554,8 @@ def set_mac_system_proxy(paths: TorPaths, socks_port: int, http_port: int, enabl
         except FileNotFoundError:
             services = mac_network_services()
         paths.proxy_state.unlink(missing_ok=True)
-    per_service = [mac_proxy_commands(svc, socks_port, http_port, enable) for svc in services]
+    per_service = [mac_proxy_commands(svc, socks_port, http_port, enable, http_only)
+                   for svc in services]
     results = _networksetup_all([cmd for cmds in per_service for cmd in cmds])
     changed, i = [], 0
     for service, cmds in zip(services, per_service):

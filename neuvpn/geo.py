@@ -98,8 +98,19 @@ def lookup(
     raise OSError("Kein Geo-IP-Dienst erreichbar:\n  " + "\n  ".join(errors))
 
 
+def _get_json_via_http_proxy(url: str, proxy: tuple[str, int], timeout: float) -> dict:
+    """Fetch through a remote HTTP proxy (CONNECT for https, TLS checked as usual)."""
+    addr = f"http://{proxy[0]}:{proxy[1]}"
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({"http": addr, "https": addr}))
+    req = urllib.request.Request(url, headers=_HEADERS)
+    with opener.open(req, timeout=timeout) as resp:
+        return json.loads(resp.read())
+
+
 def lookup_consensus(
-    urls: list[str] | None = None, timeout: float = 10.0, socks: tuple[str, int] | None = None
+    urls: list[str] | None = None, timeout: float = 10.0, socks: tuple[str, int] | None = None,
+    http_proxy: tuple[str, int] | None = None,
 ) -> tuple[str | None, set[str], str | None]:
     """Ask EVERY reachable geo service and return (ip, {country codes}, city).
 
@@ -112,6 +123,8 @@ def lookup_consensus(
         try:
             if socks:
                 results.append(parse_geo(_get_json_via_socks(url, socks, timeout)))
+            elif http_proxy:
+                results.append(parse_geo(_get_json_via_http_proxy(url, http_proxy, timeout)))
             else:
                 req = urllib.request.Request(url, headers=_HEADERS)
                 with urllib.request.urlopen(req, timeout=timeout) as resp:
