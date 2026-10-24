@@ -96,3 +96,31 @@ def lookup(
         except (OSError, ValueError) as exc:
             errors.append(f"{url}: {exc}")
     raise OSError("Kein Geo-IP-Dienst erreichbar:\n  " + "\n  ".join(errors))
+
+
+def lookup_consensus(
+    urls: list[str] | None = None, timeout: float = 10.0, socks: tuple[str, int] | None = None
+) -> tuple[str | None, set[str], str | None]:
+    """Ask EVERY reachable geo service and return (ip, {country codes}, city).
+
+    Websites use different GeoIP databases; a Tor exit that one database places
+    in Romania may be Iceland in another. Only when all reachable services agree
+    does the set contain a single country.
+    """
+    results, errors = [], []
+    for url in urls or GEO_SERVICES:
+        try:
+            if socks:
+                results.append(parse_geo(_get_json_via_socks(url, socks, timeout)))
+            else:
+                req = urllib.request.Request(url, headers=_HEADERS)
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    results.append(parse_geo(json.load(resp)))
+        except (OSError, ValueError) as exc:
+            errors.append(f"{url}: {exc}")
+    if not results:
+        raise OSError("Kein Geo-IP-Dienst erreichbar:\n  " + "\n  ".join(errors))
+    ip = next((r[0] for r in results if r[0]), None)
+    city = next((r[2] for r in results if r[2]), None)
+    countries = {r[1] for r in results if r[1]}
+    return ip, countries, city

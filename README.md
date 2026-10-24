@@ -34,9 +34,14 @@ Außerdem kann `neuvpn` später auch einen **eigenen WireGuard-Server** verwalte
 Danach startet die App wie jedes andere Programm (Programme-Ordner, Launchpad, Spotlight, Dock).
 
 ### Benutzen
-- App öffnen → **Einschalten**. Nach 10–60 Sekunden steht da **„An – Rumänien“** mit deiner neuen IP.
+- App öffnen → **Land wählen** (Rumänien, Türkei, Indien, Argentinien, Ecuador) → **Einschalten**.
+  Nach 10–60 Sekunden steht da z. B. **„An – Rumänien“** mit deiner neuen IP.
   Beim ersten Einschalten fragt macOS nach deinem Passwort (für die Proxy-Einstellung des Macs).
-- **Neue rumänische IP**: wechselt die IP, bleibt in Rumänien.
+  Die App prüft die IP bei **mehreren** Geo-Diensten und wechselt den Server automatisch, bis
+  **alle** dasselbe Land melden – IP-Adresse und angezeigter Standort sind damit immer identisch.
+  Hat ein Land gerade keine Tor-Ausgangs-Server (passiert bei Argentinien/Ecuador oft), sagt die
+  App das ehrlich, statt ewig zu verbinden.
+- **Neue IP (Land)**: wechselt die IP, bleibt im gewählten Land.
 - **Handy im selben WLAN mitnutzen**: vor dem Einschalten anhaken – die App zeigt dann Server und
   Port, die du am Handy einträgst (siehe unten, Handy Variante 2).
 - **Ausschalten**, das **Fenster schließen** oder **Cmd+Q** → normale IP. Falls der Mac abstürzt,

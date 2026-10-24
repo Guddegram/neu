@@ -22,7 +22,8 @@ from .config import (
     write_secret,
 )
 
-COUNTRY_NAMES = {"RO": "Rumänien", "DE": "Deutschland", "AT": "Österreich", "CH": "Schweiz"}
+COUNTRY_NAMES = {"RO": "Rumänien", "DE": "Deutschland", "AT": "Österreich", "CH": "Schweiz",
+                 "TR": "Türkei", "IN": "Indien", "AR": "Argentinien", "EC": "Ecuador"}
 
 
 def _country(code: str) -> str:

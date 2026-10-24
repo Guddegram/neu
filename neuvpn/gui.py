@@ -16,7 +16,17 @@ from tkinter import ttk
 from . import httpproxy, tor
 from .config import default_data_dir
 
-COUNTRY = "RO"
+COUNTRY = "RO"  # default selection
+# exactly these countries are offered, nothing else
+COUNTRIES = {
+    "RO": ("🇷🇴", "Rumänien"),
+    "TR": ("🇹🇷", "Türkei"),
+    "IN": ("🇮🇳", "Indien"),
+    "AR": ("🇦🇷", "Argentinien"),
+    "EC": ("🇪🇨", "Ecuador"),
+}
+_LABELS = {code: f"{flag}  {name}" for code, (flag, name) in COUNTRIES.items()}
+_BY_LABEL = {label: code for code, label in _LABELS.items()}
 SOCKS, HTTP, CONTROL = tor.DEFAULT_SOCKS_PORT, tor.DEFAULT_HTTP_PORT, tor.DEFAULT_CONTROL_PORT
 WATCH_INTERVAL_MS = int(os.environ.get("NEUVPN_GUI_WATCH_MS", "30000"))
 COLORS = {"off": "#8e8e93", "connecting": "#ff9f0a", "on": "#30d158", "error": "#ff453a"}
@@ -33,30 +43,39 @@ class App:
         self.cancelled = False
         self.watching = False
         self.sharing = False  # copy of the checkbox, safe to read from worker threads
+        self.active_country = os.environ.get("NEUVPN_GUI_COUNTRY", COUNTRY).upper()
+        if self.active_country not in COUNTRIES:
+            self.active_country = COUNTRY
         self.status_file = os.environ.get("NEUVPN_GUI_STATUS")
 
         root.title("Rumänien-VPN")
         root.resizable(False, False)
         frame = ttk.Frame(root, padding=24)
         frame.grid()
-        ttk.Label(frame, text="🇷🇴  Rumänien-VPN", font=("Helvetica", 20, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=(0, 16))
+        ttk.Label(frame, text="🌍  Länder-VPN", font=("Helvetica", 20, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=(0, 12))
+        self.country_var = tk.StringVar(value=_LABELS[self.active_country])
+        self.country_box = ttk.Combobox(frame, textvariable=self.country_var, state="readonly",
+                                        values=list(_LABELS.values()), width=20,
+                                        font=("Helvetica", 14))
+        self.country_box.grid(row=1, column=0, columnspan=2, pady=(0, 12))
+        self.country_box.bind("<<ComboboxSelected>>", lambda _e: self.pick_country())
         self.dot = tk.Canvas(frame, width=18, height=18, highlightthickness=0)
-        self.dot.grid(row=1, column=0, sticky="e", padx=(0, 8))
+        self.dot.grid(row=2, column=0, sticky="e", padx=(0, 8))
         self.title = ttk.Label(frame, font=("Helvetica", 15, "bold"))
-        self.title.grid(row=1, column=1, sticky="w")
+        self.title.grid(row=2, column=1, sticky="w")
         self.detail = ttk.Label(frame, justify="center", wraplength=320)
-        self.detail.grid(row=2, column=0, columnspan=2, pady=(6, 16))
+        self.detail.grid(row=3, column=0, columnspan=2, pady=(6, 16))
         self.button = ttk.Button(frame, width=22, command=self.toggle)
-        self.button.grid(row=3, column=0, columnspan=2, ipady=8)
-        self.newip = ttk.Button(frame, text="Neue rumänische IP", width=22, command=self.new_ip)
-        self.newip.grid(row=4, column=0, columnspan=2, pady=(8, 0))
+        self.button.grid(row=4, column=0, columnspan=2, ipady=8)
+        self.newip = ttk.Button(frame, text="Neue IP", width=22, command=self.new_ip)
+        self.newip.grid(row=5, column=0, columnspan=2, pady=(8, 0))
         self.share = tk.BooleanVar(value=os.environ.get("NEUVPN_GUI_SHARE") == "1")
         self.share_box = ttk.Checkbutton(frame, text="Handy im selben WLAN mitnutzen",
                                          variable=self.share)
-        self.share_box.grid(row=5, column=0, columnspan=2, pady=(16, 0))
+        self.share_box.grid(row=6, column=0, columnspan=2, pady=(16, 0))
         self.share_info = ttk.Label(frame, justify="center", wraplength=320, foreground="#636366")
-        self.share_info.grid(row=6, column=0, columnspan=2, pady=(6, 0))
+        self.share_info.grid(row=7, column=0, columnspan=2, pady=(6, 0))
 
         root.protocol("WM_DELETE_WINDOW", self.quit)
         # macOS: Cmd+Q, "Beenden" im Dock/Menü and logout go through ::tk::mac::Quit
@@ -95,6 +114,7 @@ class App:
         state, info = self.state, self.info
         self.dot.delete("all")
         self.dot.create_oval(2, 2, 16, 16, fill=COLORS[state], outline="")
+        active_name = COUNTRIES[self.active_country][1]
         if state == "off":
             title, detail, button = "Aus", "Du surfst mit deiner normalen IP.", "Einschalten"
         elif state == "connecting":
@@ -102,10 +122,14 @@ class App:
             detail = info.get("message") or f"Verbindungsaufbau {info.get('percent', 0)} %"
             button = "Abbrechen"
         elif state == "on":
-            where = "Rumänien" if info.get("country") == COUNTRY else (info.get("country") or "?")
+            code = info.get("country")
+            where = COUNTRIES.get(code, ("", code or "?"))[1]
             city = f", {info['city']}" if info.get("city") else ""
             title = f"An – {where}"
-            detail = f"Öffentliche IP: {info.get('ip', '?')}{city}\nSafari, Chrome & Co. laufen über Rumänien."
+            detail = (f"Öffentliche IP: {info.get('ip', '?')}{city}\n"
+                      f"Safari, Chrome & Co. laufen über {where}.")
+            if code != self.active_country:
+                detail += "\nStandort weicht noch ab – wird automatisch korrigiert …"
             button = "Ausschalten"
         else:
             title, detail, button = "Fehler", info.get("message", ""), "Nochmal versuchen"
@@ -115,8 +139,11 @@ class App:
         self.detail.configure(text=detail)
         self.button.configure(text=button, state="disabled" if self.busy and state != "connecting"
                               else "normal")
-        self.newip.configure(state="normal" if state == "on" and not self.busy else "disabled")
+        self.newip.configure(text=f"Neue IP ({active_name})",
+                             state="normal" if state == "on" and not self.busy else "disabled")
         self.share_box.configure(state="normal" if state in ("off", "error") else "disabled")
+        self.country_box.configure(state="readonly" if state in ("off", "error") and not self.busy
+                                   else "disabled")
         lan = info.get("lan")
         self.share_info.configure(text=(
             f"Am Handy: WLAN › Proxy › Manuell\nServer {lan}   Port {HTTP}" if lan else ""))
@@ -156,6 +183,13 @@ class App:
 
     # ---- actions -------------------------------------------------------
 
+    def pick_country(self) -> None:
+        if self.state in ("off", "error") and not self.busy:
+            self.active_country = _BY_LABEL.get(self.country_var.get(), COUNTRY)
+        else:  # locked while connected; put the selection back
+            self.country_var.set(_LABELS[self.active_country])
+        self.render()
+
     def toggle(self) -> None:
         if self.state in ("off", "error"):
             self.sharing = self.share.get()
@@ -177,9 +211,18 @@ class App:
 
     def _start_worker(self) -> None:
         self.cancelled = False
+        country = self.active_country
+        name = COUNTRIES[country][1]
+        self.post("connecting", {"percent": 0, "message": f"Prüfe Server in {name} …"})
+        exits = tor.exit_count(country)  # honest check: None = unknown, 0 = impossible
+        if exits == 0:
+            self.post("error", {"message": (
+                f"In {name} gibt es im Tor-Netz gerade keine Ausgangs-Server – eine "
+                f"{name}-IP ist deshalb aktuell nicht möglich. Bitte anderes Land wählen.")})
+            return
         self.post("connecting", {"percent": 0})
         try:
-            torrc = tor.build_torrc(self.paths, COUNTRY, SOCKS, HTTP, CONTROL, share=self.sharing)
+            torrc = tor.build_torrc(self.paths, country, SOCKS, HTTP, CONTROL, share=self.sharing)
             tor.start(
                 self.paths, torrc,
                 progress=lambda p: self.post("connecting", {"percent": p}),
@@ -205,7 +248,8 @@ class App:
             lan = tor.lan_addresses()
             info["lan"] = lan[0] if lan else "?"
         # check like a website does; exits located elsewhere are excluded automatically
-        ip, country, city = tor.ensure_exit_country(self.paths, COUNTRY, SOCKS, CONTROL)
+        ip, country, city = tor.ensure_exit_country(self.paths, self.active_country,
+                                                    SOCKS, CONTROL)
         if ip:
             info.update(ip=ip, country=country, city=city)
         else:

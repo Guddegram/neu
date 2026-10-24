@@ -87,9 +87,10 @@ class ExitCheckTest(unittest.TestCase):
         self.assertIn("ExcludeExitNodes 140.233.190.47,1.2.3.4", tor.build_torrc(self.paths, "RO"))
 
     def test_exit_located_elsewhere_is_excluded(self):
-        answers = iter([("140.233.190.47", "US", None), ("185.100.87.192", "RO", "Bucharest")])
+        answers = iter([("140.233.190.47", {"US"}, None),
+                        ("185.100.87.192", {"RO"}, "Bucharest")])
         sent = []
-        with mock.patch.object(geo, "lookup", side_effect=lambda **kw: next(answers)), \
+        with mock.patch.object(geo, "lookup_consensus", side_effect=lambda **kw: next(answers)), \
                 mock.patch.object(tor, "_control", side_effect=lambda p, port, cmds: sent.append(cmds)):
             result = tor.ensure_exit_country(self.paths, "RO", wait=0)
         self.assertEqual(result, ("185.100.87.192", "RO", "Bucharest"))
@@ -97,11 +98,21 @@ class ExitCheckTest(unittest.TestCase):
         self.assertEqual(sent, [['SETCONF ExcludeExitNodes="140.233.190.47"', "SIGNAL NEWNYM"]])
 
     def test_exclusion_survives_without_control_port_and_ignores_garbage(self):
-        answers = iter([("9.9.9.9", "US", None), ("not-an-ip", "DE", None), ("5.5.5.5", "RO", None)])
-        with mock.patch.object(geo, "lookup", side_effect=lambda **kw: next(answers)):
+        answers = iter([("9.9.9.9", {"US"}, None), ("not-an-ip", {"DE"}, None),
+                        ("5.5.5.5", {"RO"}, None)])
+        with mock.patch.object(geo, "lookup_consensus", side_effect=lambda **kw: next(answers)):
             result = tor.ensure_exit_country(self.paths, "RO", wait=0)  # no tor running
         self.assertEqual(result[1], "RO")
         self.assertEqual(tor.excluded_exits(self.paths), ["9.9.9.9"])
+
+    def test_exit_with_disagreeing_databases_is_excluded(self):
+        # the "Iceland bug": one geo database says RO, another IS -> some websites
+        # would show Iceland. Such exits must be replaced, not shown as "Rumänien".
+        answers = iter([("1.2.3.4", {"RO", "IS"}, None), ("5.6.7.8", {"RO"}, "Bucharest")])
+        with mock.patch.object(geo, "lookup_consensus", side_effect=lambda **kw: next(answers)):
+            result = tor.ensure_exit_country(self.paths, "RO", wait=0)
+        self.assertEqual(result, ("5.6.7.8", "RO", "Bucharest"))
+        self.assertEqual(tor.excluded_exits(self.paths), ["1.2.3.4"])
 
     def test_exit_country_from_torrc(self):
         self.assertEqual(tor._exit_country(tor.build_torrc(self.paths, "ro")), "RO")
@@ -136,7 +147,7 @@ class ExitCheckTest(unittest.TestCase):
         self.assertEqual(watch.call_args.args, (tor.TorPaths(Path("/tmp/x")), "RO", 9055, 9057))
 
     def test_lookup_failures_are_retried(self):
-        with mock.patch.object(geo, "lookup", side_effect=OSError("down")):
+        with mock.patch.object(geo, "lookup_consensus", side_effect=OSError("down")):
             self.assertEqual(tor.ensure_exit_country(self.paths, "RO", attempts=2, wait=0),
                              (None, None, None))
 

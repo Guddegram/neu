@@ -407,22 +407,29 @@ def exclude_exit(paths: TorPaths, ip: str, control_port: int = DEFAULT_CONTROL_P
 def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT_SOCKS_PORT,
                         control_port: int = DEFAULT_CONTROL_PORT, attempts: int = 6,
                         wait: float = 3.0):
-    """Check the exit like a website does; exclude exits located elsewhere and try again.
+    """Check the exit like websites do; exclude exits located elsewhere and try again.
 
-    Tor's own GeoIP data and the databases websites use (e.g. MaxMind) sometimes
-    disagree about single exit relays. Returns (ip, country, city) of the last check.
+    All reachable geo services must agree on the country (they use different
+    databases, e.g. MaxMind vs. ip-api): an exit that only one of them places in
+    the chosen country would still show up as another country on some websites.
+    Returns (ip, country, city) of the last check.
     """
     from . import geo
 
     result = (None, None, None)
+    target = country.upper()
     for _ in range(attempts):
         try:
-            result = geo.lookup(socks=("127.0.0.1", socks_port), timeout=30)
+            ip, countries, city = geo.lookup_consensus(socks=("127.0.0.1", socks_port),
+                                                       timeout=30)
         except OSError:
             time.sleep(wait)
             continue
-        ip, found, _ = result
-        if found == country.upper() or not ip or not found:
+        # if services disagree, show a country that is NOT the target (honest display)
+        found = target if countries == {target} else next(
+            iter(sorted(countries - {target})), next(iter(countries), None))
+        result = (ip, found, city)
+        if countries == {target} or not ip or not countries:
             return result
         try:
             exclude_exit(paths, ip, control_port)
@@ -430,6 +437,29 @@ def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT
             pass
         time.sleep(wait)
     return result
+
+
+ONIONOO_URL = ("https://onionoo.torproject.org/summary"
+               "?search=country:{}%20flag:exit%20running:true")
+
+
+def exit_count(country: str, timeout: float = 8.0) -> int | None:
+    """Running Tor exit relays in a country, or None if the check is unavailable.
+
+    Best effort via the Tor project's Onionoo API (direct connection, before
+    tor runs). Lets the app say honestly that a country has no exits right now
+    instead of hanging in the bootstrap forever.
+    """
+    import json
+    import urllib.request
+
+    try:
+        req = urllib.request.Request(ONIONOO_URL.format(country.strip().lower()),
+                                     headers={"User-Agent": "neuvpn"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return len(json.load(resp).get("relays", []))
+    except (OSError, ValueError):
+        return None
 
 
 def lan_addresses() -> list[str]:

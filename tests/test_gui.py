@@ -40,9 +40,13 @@ class GuiTest(unittest.TestCase):
         patcher = mock.patch.dict(os.environ, env)
         patcher.start()
         self.addCleanup(patcher.stop)
-        lookup = mock.patch.object(geo, "lookup", return_value=("185.1.2.3", "RO", "Bucharest"))
+        lookup = mock.patch.object(geo, "lookup_consensus",
+                                   return_value=("185.1.2.3", {"RO"}, "Bucharest"))
         self.lookup = lookup.start()
         self.addCleanup(lookup.stop)
+        exits = mock.patch.object(tor, "exit_count", return_value=None)  # no network in tests
+        self.exit_count = exits.start()
+        self.addCleanup(exits.stop)
         self.root = tk.Tk()
         self.addCleanup(self._cleanup)
 
@@ -94,7 +98,8 @@ class GuiTest(unittest.TestCase):
 
     def test_exit_in_wrong_country_is_replaced(self):
         self.fake_tor()
-        answers = iter([("140.233.190.47", "US", None)] + [("185.100.87.192", "RO", "Bucharest")] * 10)
+        answers = iter([("140.233.190.47", {"US"}, None)]
+                       + [("185.100.87.192", {"RO"}, "Bucharest")] * 10)
         self.lookup.side_effect = lambda **kw: next(answers)
         app = self.gui.App(self.root)
         app.toggle()
