@@ -2,6 +2,7 @@
 
 import http.client
 import json
+import re
 import socket
 import ssl
 import struct
@@ -80,6 +81,68 @@ def _get_json_via_socks(url: str, proxy: tuple[str, int], timeout: float) -> dic
         return json.loads(resp.read())
     finally:
         conn.close()
+
+
+# Google's own idea of where the IP is: youtube.com embeds the detected country
+# as "GL":"XX" in its page config. This is what "my location" on Google follows.
+GOOGLE_URL = "https://www.youtube.com/"
+_GL_RE = re.compile(rb'"[gG][lL]"\s*:\s*"([A-Z]{2})"')
+_BROWSER_HEADERS = {
+    "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                   "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"),
+    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+}
+
+
+def _open_response(url: str, timeout: float, socks: tuple[str, int] | None = None,
+                   http_proxy: tuple[str, int] | None = None):
+    if socks:
+        parts = urllib.parse.urlsplit(url)
+        https = parts.scheme == "https"
+        port = parts.port or (443 if https else 80)
+        sock = socks5_connect(socks, parts.hostname, port, timeout)
+        if https:
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=parts.hostname)
+        conn = http.client.HTTPConnection(parts.hostname, port, timeout=timeout)
+        conn.sock = sock
+        target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
+        conn.request("GET", target, headers={**_BROWSER_HEADERS, "Host": parts.netloc})
+        return conn.getresponse()
+    if http_proxy:
+        addr = f"http://{http_proxy[0]}:{http_proxy[1]}"
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": addr, "https": addr}))
+        return opener.open(urllib.request.Request(url, headers=_BROWSER_HEADERS),
+                           timeout=timeout)
+    return urllib.request.urlopen(urllib.request.Request(url, headers=_BROWSER_HEADERS),
+                                  timeout=timeout)
+
+
+def google_country(timeout: float = 25.0, socks: tuple[str, int] | None = None,
+                   http_proxy: tuple[str, int] | None = None) -> str | None:
+    """Country code Google itself assigns to the current IP, or None (best effort).
+
+    Streams youtube.com only until the "gl" config value appears (usually within
+    the first 100 KB), so the check stays cheap even through Tor or slow proxies.
+    """
+    resp = None
+    try:
+        resp = _open_response(GOOGLE_URL, timeout, socks=socks, http_proxy=http_proxy)
+        buf = b""
+        while len(buf) < 1_500_000:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            buf += chunk
+            match = _GL_RE.search(buf)
+            if match:
+                return match.group(1).decode()
+    except (OSError, ValueError):
+        pass
+    finally:
+        if resp is not None:
+            resp.close()
+    return None
 
 
 def lookup(

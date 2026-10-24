@@ -425,11 +425,18 @@ def ensure_exit_country(paths: TorPaths, country: str, socks_port: int = DEFAULT
         except OSError:
             time.sleep(wait)
             continue
+        ok = countries == {target}
+        if ok and ip:
+            # Google keeps its own database; "my location" must match too
+            google = geo.google_country(socks=("127.0.0.1", socks_port))
+            if google not in (None, target):
+                ok = False
+                countries = {google}
         # if services disagree, show a country that is NOT the target (honest display)
-        found = target if countries == {target} else next(
+        found = target if ok else next(
             iter(sorted(countries - {target})), next(iter(countries), None))
         result = (ip, found, city)
-        if countries == {target} or not ip or not countries:
+        if ok or not ip or not countries:
             return result
         try:
             exclude_exit(paths, ip, control_port)

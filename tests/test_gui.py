@@ -47,6 +47,9 @@ class GuiTest(unittest.TestCase):
         exits = mock.patch.object(tor, "exit_count", return_value=None)  # no network in tests
         self.exit_count = exits.start()
         self.addCleanup(exits.stop)
+        google = mock.patch.object(geo, "google_country", return_value=None)
+        self.google = google.start()
+        self.addCleanup(google.stop)
         self.root = tk.Tk()
         self.addCleanup(self._cleanup)
 
@@ -139,6 +142,25 @@ class GuiTest(unittest.TestCase):
             app.toggle()
             self.wait_for(app, "off")
             self.assertIsNone(app.local_proxy)
+
+    def test_falls_back_to_free_proxy_when_tor_exits_cannot_be_confirmed(self):
+        from neuvpn import freeproxy
+
+        self.fake_tor()
+        self.exit_count.return_value = 6  # Türkei: exits exist but are dead/slow
+        self.lookup.side_effect = OSError("timed out")  # nothing reachable via tor
+        found = (("46.197.136.14", 8080), "46.197.136.14", "Erzurum")
+        with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "TR"}), \
+                mock.patch.object(freeproxy, "find_proxy", return_value=found), \
+                mock.patch.object(tor, "is_mac", return_value=False):
+            app = self.gui.App(self.root)
+            app.toggle()
+            self.wait_for(app, "on", timeout=60)
+            self.assertEqual(app.mode, "proxy")
+            self.assertEqual(app.title.cget("text"), "An – Türkei")
+            self.assertIsNone(tor.running_pid(app.paths))  # tor was stopped again
+            app.toggle()
+            self.wait_for(app, "off")
 
     def test_free_proxy_mode_honest_error_when_none_works(self):
         from neuvpn import freeproxy

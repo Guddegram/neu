@@ -37,9 +37,12 @@ Danach startet die App wie jedes andere Programm (Programme-Ordner, Launchpad, S
 - App öffnen → **Land wählen** (Rumänien, Türkei, Indien, Argentinien, Ecuador) → **Einschalten**.
   Nach 10–60 Sekunden steht da z. B. **„An – Rumänien“** mit deiner neuen IP.
   Beim ersten Einschalten fragt macOS nach deinem Passwort (für die Proxy-Einstellung des Macs).
-  Die App prüft die IP bei **mehreren** Geo-Diensten und wechselt den Server automatisch, bis
-  **alle** dasselbe Land melden – IP-Adresse und angezeigter Standort sind damit immer identisch.
-  Hat ein Land gerade keine Tor-Ausgangs-Server (bei Argentinien/Ecuador normal), sucht die App
+  Die App prüft die IP bei **mehreren** Geo-Diensten **und bei Google selbst** und wechselt den
+  Server automatisch, bis **alle** dasselbe Land melden – IP-Adresse und angezeigter Standort
+  (auch „Mein Standort" bei Google, im privaten Fenster und ohne Browser-Standortfreigabe) sind
+  damit identisch.
+  Hat ein Land gerade keine Tor-Ausgangs-Server (bei Argentinien/Ecuador normal) oder sind sie
+  tot/überlastet (bei der Türkei und Indien möglich), sucht die App
   automatisch einen **freien Proxy-Server** in dem Land und prüft ihn genauso streng. Freie Proxys
   werden von Unbekannten betrieben und sind langsamer – nichts Sensibles (Banking, Logins) darüber
   machen. Ist gerade keiner online, sagt die App das ehrlich, statt ewig zu verbinden.

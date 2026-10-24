@@ -80,9 +80,13 @@ def verify(proxy: tuple[str, int], country: str,
                                                    http_proxy=proxy)
     except OSError:
         return None
-    if ip and countries == {country.strip().upper()}:
-        return ip, city
-    return None
+    cc = country.strip().upper()
+    if not ip or countries != {cc}:
+        return None
+    google = geo.google_country(http_proxy=proxy)  # "my location" must match too
+    if google not in (None, cc):
+        return None
+    return ip, city
 
 
 def find_proxy(country: str, exclude: set[tuple[str, int]] | None = None, limit: int = 60,

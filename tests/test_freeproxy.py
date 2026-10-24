@@ -26,17 +26,27 @@ class VerifyTest(unittest.TestCase):
             self.assertTrue(url.startswith("https://"))  # a proxy can tamper with http
 
     def test_verified_when_all_agree(self):
-        with mock.patch.object(geo, "lookup_consensus",
-                               return_value=("190.1.2.3", {"AR"}, "Buenos Aires")) as lc:
+        with mock.patch.object(geo, "google_country", return_value="AR") as gc, \
+                mock.patch.object(geo, "lookup_consensus",
+                                  return_value=("190.1.2.3", {"AR"}, "Buenos Aires")) as lc:
             self.assertEqual(freeproxy.verify(("1.2.3.4", 8080), "ar"),
                              ("190.1.2.3", "Buenos Aires"))
         self.assertEqual(lc.call_args.kwargs["http_proxy"], ("1.2.3.4", 8080))
         self.assertEqual(lc.call_args.kwargs["urls"], freeproxy.CHECK_URLS)
+        self.assertEqual(gc.call_args.kwargs["http_proxy"], ("1.2.3.4", 8080))
 
     def test_rejected_on_disagreement_or_failure(self):
-        with mock.patch.object(geo, "lookup_consensus", return_value=("x", {"AR", "BR"}, None)):
-            self.assertIsNone(freeproxy.verify(("1.2.3.4", 80), "AR"))
-        with mock.patch.object(geo, "lookup_consensus", side_effect=OSError("tot")):
+        with mock.patch.object(geo, "google_country", return_value=None):
+            with mock.patch.object(geo, "lookup_consensus",
+                                   return_value=("x", {"AR", "BR"}, None)):
+                self.assertIsNone(freeproxy.verify(("1.2.3.4", 80), "AR"))
+            with mock.patch.object(geo, "lookup_consensus", side_effect=OSError("tot")):
+                self.assertIsNone(freeproxy.verify(("1.2.3.4", 80), "AR"))
+
+    def test_rejected_when_google_disagrees(self):
+        with mock.patch.object(geo, "google_country", return_value="BR"), \
+                mock.patch.object(geo, "lookup_consensus",
+                                  return_value=("190.1.2.3", {"AR"}, None)):
             self.assertIsNone(freeproxy.verify(("1.2.3.4", 80), "AR"))
 
 

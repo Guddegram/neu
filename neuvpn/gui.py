@@ -241,8 +241,20 @@ class App:
         except (tor.TorError, OSError) as exc:
             if self.cancelled:
                 self.post("off")
-            else:
-                self.post("error", {"message": str(exc)[:300]})
+                return
+            tor.stop(self.paths)  # plan B: verified free proxies
+            self._proxy_start(country, name, reason=f"Tor klappt nicht ({str(exc)[:80]})")
+            return
+        # confirm the country (geo services + Google) BEFORE touching the system proxy
+        self.post("connecting", {"percent": 100, "message": f"Prüfe Standort ({name}) …"})
+        ip, found, _city = tor.ensure_exit_country(self.paths, country, SOCKS, CONTROL)
+        if found != country or not ip:
+            tor.stop(self.paths)
+            if self.cancelled:
+                self.post("off")
+                return
+            self._proxy_start(country, name,
+                              reason=f"Tor-Server in {name} gerade nicht bestätigt")
             return
         if tor.is_mac() and not tor.set_mac_system_proxy(self.paths, SOCKS, HTTP, enable=True):
             tor.stop(self.paths)
@@ -261,10 +273,12 @@ class App:
             note += "\nHandy-Mitnutzung gibt es im Proxy-Modus noch nicht."
         return {"ip": ip, "country": self.active_country, "city": city, "note": note}
 
-    def _proxy_start(self, country: str, name: str) -> None:
+    def _proxy_start(self, country: str, name: str,
+                     reason: str | None = None) -> None:
         self.mode = "proxy"
+        reason = reason or f"Keine Tor-Server in {name}"
         self.post("connecting", {"message": (
-            f"Keine Tor-Server in {name} – suche einen freien Proxy-Server dort "
+            f"{reason} – suche einen freien Proxy-Server in {name} "
             "(kann 1–2 Minuten dauern) …")})
         found = freeproxy.find_proxy(
             country, exclude=self.bad_proxies,
