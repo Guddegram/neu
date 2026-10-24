@@ -242,8 +242,11 @@ class App:
             if self.cancelled:
                 self.post("off")
                 return
-            tor.stop(self.paths)  # plan B: verified free proxies
-            self._proxy_start(country, name, reason=f"Tor klappt nicht ({str(exc)[:80]})")
+            if isinstance(exc, tor.TorBootstrapTimeout):
+                tor.stop(self.paths)  # country's exits dead/blocked: plan B, free proxies
+                self._proxy_start(country, name, reason="Tor kommt gerade nicht durch")
+                return
+            self.post("error", {"message": str(exc)[:300]})
             return
         # confirm the country (geo services + Google) BEFORE touching the system proxy
         self.post("connecting", {"percent": 100, "message": f"Prüfe Standort ({name}) …"})

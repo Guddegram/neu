@@ -34,6 +34,11 @@ class TorError(Exception):
     pass
 
 
+class TorBootstrapTimeout(TorError):
+    """Tor could not finish bootstrapping (network blocks Tor, or the chosen
+    country's exits are dead) – callers may fall back to free proxies."""
+
+
 @dataclass
 class TorPaths:
     base: Path
@@ -264,7 +269,7 @@ def start(
         time.sleep(0.5)
     _terminate(proc)
     paths.pid.unlink(missing_ok=True)
-    raise TorError(
+    raise TorBootstrapTimeout(
         "Tor konnte sich nicht rechtzeitig verbinden (blockiert das Netz Tor?).\n" + _log_tail(paths)
     )
 

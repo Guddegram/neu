@@ -53,7 +53,14 @@ class GuiTest(unittest.TestCase):
         self.root = tk.Tk()
         self.addCleanup(self._cleanup)
 
+    def make_app(self):
+        self.app = self.gui.App(self.root)
+        return self.app
+
     def _cleanup(self):
+        app = getattr(self, "app", None)
+        if app is not None:
+            app._close_local_proxy()  # frees port 9056 for the next test
         tor.stop(tor.TorPaths(Path(os.environ["NEUVPN_DIR"]) / "tor"))
         try:
             self.root.destroy()
@@ -76,7 +83,7 @@ class GuiTest(unittest.TestCase):
 
     def test_on_new_ip_off(self):
         self.fake_tor()
-        app = self.gui.App(self.root)
+        app = self.make_app()
         self.assertEqual(app.state, "off")
         self.assertEqual(app.button.cget("text"), "Einschalten")
         app.toggle()
@@ -104,7 +111,7 @@ class GuiTest(unittest.TestCase):
         answers = iter([("140.233.190.47", {"US"}, None)]
                        + [("185.100.87.192", {"RO"}, "Bucharest")] * 10)
         self.lookup.side_effect = lambda **kw: next(answers)
-        app = self.gui.App(self.root)
+        app = self.make_app()
         app.toggle()
         self.wait_for(app, "on")
         self.assertEqual(app.info["ip"], "185.100.87.192")
@@ -120,7 +127,7 @@ class GuiTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "EC"}), \
                 mock.patch.object(freeproxy, "find_proxy", return_value=found) as find, \
                 mock.patch.object(tor, "is_mac", return_value=False):
-            app = self.gui.App(self.root)
+            app = self.make_app()
             self.assertEqual(app.active_country, "EC")
             app.toggle()
             self.wait_for(app, "on")
@@ -153,7 +160,7 @@ class GuiTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "TR"}), \
                 mock.patch.object(freeproxy, "find_proxy", return_value=found), \
                 mock.patch.object(tor, "is_mac", return_value=False):
-            app = self.gui.App(self.root)
+            app = self.make_app()
             app.toggle()
             self.wait_for(app, "on", timeout=60)
             self.assertEqual(app.mode, "proxy")
@@ -169,7 +176,7 @@ class GuiTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"NEUVPN_GUI_COUNTRY": "AR"}), \
                 mock.patch.object(freeproxy, "find_proxy", return_value=None), \
                 mock.patch.object(tor, "is_mac", return_value=False):
-            app = self.gui.App(self.root)
+            app = self.make_app()
             app.toggle()
             self.wait_for(app, "error")
             self.assertIn("kein funktionierender kostenloser Server in Argentinien",
@@ -177,7 +184,7 @@ class GuiTest(unittest.TestCase):
 
     def test_cancel_while_connecting(self):
         self.fake_tor("hang")
-        app = self.gui.App(self.root)
+        app = self.make_app()
         app.toggle()
         self.wait_for_connecting(app)
         self.assertEqual(app.button.cget("text"), "Abbrechen")
@@ -195,7 +202,7 @@ class GuiTest(unittest.TestCase):
 
     def test_error_is_shown(self):
         self.fake_tor("crash")
-        app = self.gui.App(self.root)
+        app = self.make_app()
         app.toggle()
         self.wait_for(app, "error")
         self.assertIn("Could not bind", app.detail.cget("text"))
@@ -203,7 +210,7 @@ class GuiTest(unittest.TestCase):
 
     def test_closing_the_window_switches_off(self):
         self.fake_tor()
-        app = self.gui.App(self.root)
+        app = self.make_app()
         app.toggle()
         self.wait_for(app, "on")
         app.quit()
@@ -212,7 +219,7 @@ class GuiTest(unittest.TestCase):
 
     def test_cmd_q_switches_off(self):
         self.fake_tor()
-        app = self.gui.App(self.root)
+        app = self.make_app()
         app.toggle()
         self.wait_for(app, "on")
         self.root.tk.call("::tk::mac::Quit")  # what macOS calls for Cmd+Q / Dock "Beenden"
@@ -222,7 +229,7 @@ class GuiTest(unittest.TestCase):
     def test_share_shows_phone_settings(self):
         self.fake_tor()
         with mock.patch.object(tor, "lan_addresses", return_value=["192.168.1.50"]):
-            app = self.gui.App(self.root)
+            app = self.make_app()
             app.share.set(True)
             app.toggle()
             self.wait_for(app, "on")
