@@ -1,0 +1,17 @@
+# Wohnungsbot Bonn
+#   docker compose up -d --build     starten (läuft dauerhaft, auch nach Neustart des Servers)
+#   docker compose logs -f           zuschauen
+#   docker compose run --rm wohnungsbot pruefen    einmal prüfen, Ergebnis anzeigen
+services:
+  wohnungsbot:
+    build: .
+    container_name: wohnungsbot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TZ: Europe/Berlin
+    volumes:
+      - ./daten:/daten
+      - ./config.toml:/app/config.toml:ro
+      # eigene Anschreiben-Vorlage (optional, dann in config.toml: vorlage = "anschreiben.txt")
+      # - ./anschreiben.txt:/app/anschreiben.txt:ro

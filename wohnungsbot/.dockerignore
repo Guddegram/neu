@@ -1,0 +1,5 @@
+.env
+daten
+tests
+**/__pycache__
+config.toml

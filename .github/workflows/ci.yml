@@ -25,7 +25,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck -S warning scripts/*.sh app/*.sh docker/entrypoint.sh tests/e2e/*.sh
+      - run: shellcheck -S warning scripts/*.sh app/*.sh docker/entrypoint.sh tests/e2e/*.sh wohnungsbot/docker-entrypoint.sh
+
+  # Wohnungsbot Bonn: Tests (inkl. Ende-zu-Ende mit Fake-Telegram/SMTP) und Docker-Image
+  wohnungsbot:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: wohnungsbot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -t . -v
+      - run: docker build -t wohnungsbot .
+      - run: docker run --rm wohnungsbot --help
 
   e2e:
     runs-on: ubuntu-latest

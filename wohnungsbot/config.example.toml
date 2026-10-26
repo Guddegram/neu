@@ -1,0 +1,97 @@
+# Wohnungsbot Bonn – Einstellungen
+# Kopieren nach config.toml und anpassen:  cp config.example.toml config.toml
+# Passwörter/Tokens gehören NICHT hierher, sondern in die .env (siehe .env.example).
+
+[suche]
+intervall_minuten = 30
+# Höchstens so viele Telegram-Meldungen pro Prüfung (Rest: Hinweis auf /liste)
+max_meldungen_pro_lauf = 15
+min_flaeche = 65
+
+# Nur diese Stadtteile. "Tannenbusch" deckt Neu- und Alt-Tannenbusch ab.
+# Erkannt wird das ganze Wort: "Endenich" passt, "Endenicher Allee" (Poppelsdorf) nicht.
+stadtteile = [
+  "Neu-Tannenbusch", "Alt-Tannenbusch", "Tannenbusch",
+  "Auerberg", "Endenich", "Castell", "Graurheindorf", "Dransdorf", "Buschdorf",
+]
+
+# Nennt eine Anzeige nur die Kaltmiete (und keine Nebenkosten), schätzt der Bot die
+# Warmmiete als Kaltmiete + Fläche × diesen Betrag. Solche Treffer sind als "geschätzt" markiert.
+nebenkosten_pro_qm = 3.0
+
+# Steht eines dieser Wörter im TITEL, wird die Anzeige aussortiert
+# (nur Titel: "Kein Wohnungstausch!" im Beschreibungstext stört so nicht).
+ausschluss_im_titel = ["Tausch", "Tausche", "Wohnungstausch", "Tauschwohnung", "Zwischenmiete", "Untermiete"]
+
+# Notbehelf, wenn eine Anzeige keinen Stadtteil nennt, nur die PLZ.
+# Solche Treffer kommen mit dem Hinweis "nur per PLZ erkannt – Lage prüfen".
+# 53117: fast nur deine Viertel. 53119: Tannenbusch/Auerberg, aber auch Teile der Nordstadt.
+# 53115 und 53121 bewusst NICHT, weil dort überwiegend andere Viertel liegen.
+[suche.plz_notbehelf]
+"53117" = "Auerberg/Buschdorf/Graurheindorf/Castell"
+"53119" = "Tannenbusch/Auerberg, evtl. Nordstadt"
+
+# Warmmiete-Grenzen nach Zimmerzahl. 3,5 Zimmer zählen zur 3-Zimmer-Grenze.
+# Zimmerzahlen, die in keine Gruppe fallen (z. B. 2 oder 6), werden aussortiert.
+[[suche.preisgrenze]]
+zimmer_min = 3
+zimmer_max = 3.5
+warm_max = 1100
+
+[[suche.preisgrenze]]
+zimmer_min = 4
+zimmer_max = 5.5
+warm_max = 1300
+
+# ---------------------------------------------------------------------------
+# Quelle 1 (empfohlen): Suchauftrags-E-Mails der Portale
+# Lege bei ImmobilienScout24, immowelt, Kleinanzeigen und Immomio (VEBOWAG, GWG)
+# Suchaufträge mit Benachrichtigung "sofort" an – an ein eigenes Postfach.
+# Der Bot liest dort jede neue Mail und filtert sie mit den Kriterien oben.
+# Zugangsdaten: IMAP_HOST, IMAP_BENUTZER, IMAP_PASSWORT in der .env.
+[email_suchauftraege]
+aktiv = true
+ordner = "INBOX"
+# Nur Mails, deren Absender eines dieser Wörter enthält (andere bleiben ungelesen)
+absender = ["immobilienscout24", "immowelt", "kleinanzeigen", "immomio", "vonovia",
+            "vebowag", "gwg-bonn", "vivawest", "leg-wohnen", "bundesimmobilien"]
+# Tracking-Links in den Mails zur echten Anzeigen-Adresse auflösen
+links_aufloesen = true
+
+# ---------------------------------------------------------------------------
+# Quelle 2: Angebotsseiten von Wohnungsunternehmen (HTML, ohne Login).
+# Der Bot erkennt die Angebote auf der Seite selbst (Block mit Link + € + m²).
+# Lädt eine Seite ihre Angebote per JavaScript nach, findet er dort nichts –
+# /status zeigt dann "0 Angebote gelesen". In dem Fall den E-Mail-Weg nutzen.
+[[quelle]]
+name = "GWG Bonn – freie Wohnungen"
+typ = "html"
+url = "https://www.gwg-bonn.de/wohnen/freie-wohnungen/"
+
+[[quelle]]
+name = "VEBOWAG – Wohnungssuche"
+typ = "html"
+url = "https://www.vebowag.de/wohnungen/wohnungssuche/"
+
+# Quelle 3: RSS-Feeds (falls ein Anbieter einen anbietet)
+# [[quelle]]
+# name = "Beispiel-Feed"
+# typ = "rss"
+# url = "https://example.org/angebote.rss"
+
+# ---------------------------------------------------------------------------
+# Deine Angaben fürs Anschreiben. Leere Felder -> die Zeile fällt im Anschreiben weg.
+[bewerber]
+name = "Max Mustermann"
+email = "max.mustermann@example.de"
+telefon = "0170 1234567"
+beruf = "Pflegefachkraft"
+arbeitgeber = "der Stadt Bonn (unbefristet)"
+haushalt = "2 Erwachsene und 1 Kind"
+einkommen = "ca. 4.200 €"
+einzug = "sofort"
+ueber_mich = "Ich bin Nichtraucher, habe keine Haustiere und suche eine Wohnung für die nächsten Jahre."
+
+[bewerbung]
+# Eigene Vorlage (optional). Platzhalter siehe README. Ohne Angabe: eingebaute Vorlage.
+# vorlage = "anschreiben.txt"
