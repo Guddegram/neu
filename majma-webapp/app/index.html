@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Majma</title>
+  <meta name="theme-color" content="#23401F">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Majma">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../assets/icon-192.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800&display=swap">
+  <link rel="stylesheet" href="../css/app.css">
+</head>
+<body>
+  <div class="app-bg" aria-hidden="true"></div>
+
+  <aside class="sidebar" aria-label="Navigation">
+    <a href="#/start" class="sidebar-logo"><img src="../assets/logo.png" alt="Majma"></a>
+    <nav class="sidebar-nav" id="sidebar-nav"></nav>
+    <a href="#/profil" class="sidebar-user" id="sidebar-user"></a>
+  </aside>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" id="tabbar" aria-label="Navigation"></nav>
+
+  <div id="overlay-root"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="../js/app/main.js"></script>
+</body>
+</html>
